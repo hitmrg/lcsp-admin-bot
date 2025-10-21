@@ -13,56 +13,51 @@ load_dotenv()
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('bot.log'),
-        logging.StreamHandler()
-    ]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler("bot.log"), logging.StreamHandler()],
 )
-logger = logging.getLogger('CyberLab')
+logger = logging.getLogger("LCSP_BOT_ADMIN")
 
 # Intents Discord
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
+
 class CyberLabBot(commands.Bot):
     def __init__(self):
-        super().__init__(
-            command_prefix='!',
-            intents=intents,
-            help_command=None
-        )
-        
+        super().__init__(command_prefix="!", intents=intents)
+
     async def setup_hook(self):
         # Charger les cogs
-        cogs = ['cogs.admin', 'cogs.members', 'cogs.meetings', 'cogs.reports']
-        
+        cogs = ["cogs.admin", "cogs.members", "cogs.meetings", "cogs.reports"]
+
         for cog in cogs:
             try:
                 await self.load_extension(cog)
                 logger.info(f"✅ Cog chargé: {cog}")
             except Exception as e:
                 logger.error(f"❌ Erreur chargement {cog}: {e}")
-        
+
         # Synchroniser les commandes slash
         await self.tree.sync()
         logger.info("🔄 Commandes synchronisées")
-    
+
     # Evènement de démarrage
     async def on_ready(self):
-        logger.info(f'🤖 {self.user} connecté!')
+        logger.info(f"🤖 {self.user} connecté!")
         await self.change_presence(
             activity=discord.Activity(
-                type=discord.ActivityType.watching,
-                name="la sécurité du lab"
+                type=discord.ActivityType.watching, name="Le laboratoire évolué 😭"
             )
         )
+
 
 # Lancer le bot
 async def main():
     bot = CyberLabBot()
-    await bot.start(os.getenv('DISCORD_TOKEN'))
+    await bot.start(os.getenv("DISCORD_TOKEN"))
+
 
 if __name__ == "__main__":
     asyncio.run(main())
