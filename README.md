@@ -15,7 +15,7 @@
 - ✅👑`/clear [nombre] [user]` - Supprimer une grande quantité de message dans un channel
 - ✅👑`/info` - Obtenir des informations sur le serveur
 
-  **Membres:**
+**Membres:**
 
 - ✅👑`/membre_add [user] [nom] [pole] [email] [spécialisation]` - Ajouter un membre
 - ✅👤`/membre_info [user]` - Voir les infos
@@ -28,8 +28,8 @@
 - ✅👑`/meeting_create [titre] [date] [heure] [roles] [description]` - Créer une réunion
 - ✅👑`/appel [reunion]` - Faire l'appel en spécifiant le nom de la réunion
 - ✅👑`/appel_id [id]` - Faire l'appel en spécifiant l'id de la réunion
-- ❌👤`/meeting_stats_id [id]` - Voir les statistiques d'une réunion passée en précisant l'id
-- ❌👤`/meeting_stats [reunion]` - Voir les statistiques d'une réunion passée en précisant le nom
+- ✅👤`/meeting_stats_id [id]` - Voir les statistiques d'une réunion passée en précisant l'id
+- ✅👤`/meeting_stats [reunion]` - Voir les statistiques d'une réunion passée en précisant le nom
 - ✅👑`/modifier_presence [reunion] [membre] [statut]` - Modifier la présence d'un utilisateur avec le nom de la réunion
 - ✅👑`/modifier_presence_id [id] [membre] [statut]` - Modifier la présence d'un utilisateur avec l'id de la réunion
 - ✅👤`/meetings [pole]` - Afficher les prochaines réunions

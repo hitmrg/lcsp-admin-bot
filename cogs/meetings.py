@@ -25,6 +25,7 @@ class MeetingsCog(commands.Cog):
     # Création d'une réunion
     @app_commands.command(name="meeting_create", description="Créer une réunion")
     @app_commands.describe(
+        titre="Titre de la réunion",
         date="Date de la réunion (JJ/MM/AAAA)",
         heure="Heure de la réunion (HH:MM)",
         roles='Rôles ciblés ("ALL", "DEV", "IA", "INFRA" ou combinaison "DEV,IA")',
@@ -37,9 +38,7 @@ class MeetingsCog(commands.Cog):
         titre: str,
         date: str,
         heure: str,
-        roles: Optional[
-            str
-        ] = "ALL",  # "ALL", "DEV", "IA", "INFRA" ou combinaison "DEV,IA"
+        roles: Optional[str] = "ALL",
         description: Optional[str] = None,
     ):
         await interaction.response.defer()
@@ -167,78 +166,14 @@ class MeetingsCog(commands.Cog):
             )
             return
 
-        # Créer l'embed d'appel
-        target_roles = meeting.get_target_roles()
-        roles_text = "Tous" if "ALL" in target_roles else ", ".join(target_roles)
-
-        # Récupérer les membres attendus
-        expected_members = self.db.get_members_by_roles(target_roles)
-        # Construire une représentation en ligne (max 2000 chars)
-        members_lines = []
-        for m in expected_members:
-            display = m.full_name or m.username
-            members_lines.append(f"{display}")
-        members_text = (
-            ", ".join(members_lines) if members_lines else "Aucun membre attendu"
-        )
-
-        embed = discord.Embed(
-            title=f"📢 Appel - {meeting.title}",
-            description=f"**Pôles concernés:** {roles_text}\n\n"
-            "Cliquez sur le bouton correspondant à votre statut",
-            color=discord.Color.blue(),
-            timestamp=meeting.date,
-        )
-        embed.add_field(
-            name="📅 Date de la réunion",
-            value=meeting.date.strftime("%d/%m/%Y à %H:%M"),
-            inline=False,
-        )
-        embed.add_field(name="👥 Attendues", value=members_text[:1000], inline=False)
-
-        # Créer la vue publique avec les boutons (pour que chacun puisse se marquer)
-        view = AttendanceView(meeting.id, self.db, str(interaction.user.id))
-        message = await interaction.followup.send(embed=embed, view=view)
-
-        self.active_meetings[meeting.id] = message
-
-        # Envoyer un panneau administrateur éphemère à l'initiateur permettant
-        # de gérer manuellement la présence par utilisateur (paged)
-        admin_view = AdminAttendanceView(
-            meeting.id,
-            self.db,
-            str(interaction.user.id),
-            public_message=message,
-            cog=self,
-        )
-        admin_embed = discord.Embed(
-            title=f"Panneau admin - {meeting.title}",
-            description="Utilisez les boutons ci-dessous pour affecter un statut à chaque membre (présent/absent/excusé).",
-            color=discord.Color.blurple(),
-        )
-        # inclure un aperçu
-        if members_lines:
-            admin_embed.add_field(
-                name="Exemple membres",
-                value=", ".join(members_lines[:10]),
-                inline=False,
-            )
-
-        try:
-            await interaction.followup.send(
-                embed=admin_embed, view=admin_view, ephemeral=True
-            )
-        except Exception:
-            # si l'éphemère échoue, on ignore
-            pass
+        # Créer la vue Admin pour gérer l'appel
+        await self._create_attendance_view(interaction, meeting)
 
     # Lancer l'appel pour une réunion par ID
     @app_commands.command(
-        name="appel_id", description="Faire l'appel par ID (cas d'ambiguïté)"
+        name="appel_id", description="Faire l'appel par ID de réunion"
     )
-    @app_commands.describe(
-        meeting_id="ID de la réunion, récupérer au préalable après avoir fait /appel [nom réunion] (cas d'ambiguïté)"
-    )
+    @app_commands.describe(meeting_id="ID de la réunion")
     @is_admin()
     async def start_attendance_by_id(
         self, interaction: discord.Interaction, meeting_id: int
@@ -246,73 +181,54 @@ class MeetingsCog(commands.Cog):
         await interaction.response.defer()
 
         meeting = self.db.get_meeting(meeting_id)
-        # Empêcher de relancer l'appel si déjà validé
         if not meeting:
             await interaction.followup.send("❌ Réunion introuvable")
             return
 
         if meeting.attendance_validated:
             await interaction.followup.send(
-                "❌ L'appel pour cette réunion a déjà été validé et ne peut pas être relancé"
+                "❌ L'appel pour cette réunion a déjà été validé"
             )
             return
-        # Créer l'embed d'appel
+
+        # Créer la vue Admin pour gérer l'appel
+        await self._create_attendance_view(interaction, meeting)
+
+    async def _create_attendance_view(self, interaction, meeting):
+        """Méthode helper pour créer et afficher la vue d'appel admin"""
         target_roles = meeting.get_target_roles()
         roles_text = "Tous" if "ALL" in target_roles else ", ".join(target_roles)
 
+        # Récupérer les membres attendus
         expected_members = self.db.get_members_by_roles(target_roles)
-        members_lines = [m.full_name or m.username for m in expected_members]
-        members_text = (
-            ", ".join(members_lines) if members_lines else "Aucun membre attendu"
-        )
 
+        # Créer l'embed principal
         embed = discord.Embed(
-            title=f"📢 Appel - {meeting.title}",
-            description=f"**Pôles concernés:** {roles_text}\n\n"
-            "Cliquez sur le bouton correspondant à votre statut",
+            title=f"📢 Appel Administratif - {meeting.title}",
+            description=f"**Réunion ID:** {meeting.id}\n"
+            f"**Pôles concernés:** {roles_text}\n"
+            f"**Membres attendus:** {len(expected_members)}\n\n"
+            "Utilisez l'interface ci-dessous pour gérer l'appel.",
             color=discord.Color.blue(),
             timestamp=meeting.date,
         )
+
         embed.add_field(
             name="📅 Date de la réunion",
             value=meeting.date.strftime("%d/%m/%Y à %H:%M"),
             inline=False,
         )
-        embed.add_field(name="👥 Attendues", value=members_text[:1000], inline=False)
 
-        # Créer la vue publique
-        view = AttendanceView(meeting.id, self.db, str(interaction.user.id))
-        message = await interaction.followup.send(embed=embed, view=view)
+        # Créer la vue Admin
+        admin_view = AdminAttendanceView(
+            meeting.id, self.db, str(interaction.user.id), expected_members
+        )
 
+        # Envoyer le message avec la vue
+        message = await interaction.followup.send(embed=embed, view=admin_view)
         self.active_meetings[meeting.id] = message
 
-        # Panneau admin éphemère
-        admin_view = AdminAttendanceView(
-            meeting.id,
-            self.db,
-            str(interaction.user.id),
-            public_message=message,
-            cog=self,
-        )
-        admin_embed = discord.Embed(
-            title=f"Panneau admin - {meeting.title}",
-            description="Utilisez les boutons ci-dessous pour affecter un statut à chaque membre (présent/absent/excusé).",
-            color=discord.Color.blurple(),
-        )
-        if members_lines:
-            admin_embed.add_field(
-                name="Exemple membres",
-                value=", ".join(members_lines[:10]),
-                inline=False,
-            )
-        try:
-            await interaction.followup.send(
-                embed=admin_embed, view=admin_view, ephemeral=True
-            )
-        except Exception:
-            pass
-
-    # Statistiques d'une réunion
+    # Statistiques d'une réunion par ID
     @app_commands.command(
         name="meeting_stats_id",
         description="Voir les statistiques d'une réunion passée",
@@ -326,10 +242,67 @@ class MeetingsCog(commands.Cog):
             await interaction.followup.send("❌ Réunion introuvable", ephemeral=True)
             return
 
-        meeting = stats["meeting"]
+        meeting_data = stats["meeting_data"]
         embed = discord.Embed(
-            title=f"📊 Statistiques - {meeting.title}",
-            description=f"Date: {meeting.date.strftime('%d/%m/%Y %H:%M')}",
+            title=f"📊 Statistiques - {meeting_data['title']}",
+            description=f"Date: {meeting_data['date'].strftime('%d/%m/%Y %H:%M')}",
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow(),
+        )
+
+        embed.add_field(name="✅ Présents", value=stats["present"], inline=True)
+        embed.add_field(name="❌ Absents", value=stats["absent"], inline=True)
+        embed.add_field(name="🏥 Excusés", value=stats["excused"], inline=True)
+        embed.add_field(name="🎯 Attendus", value=stats["expected"], inline=True)
+        embed.add_field(
+            name="📈 Taux de participation", value=f"{stats['rate']:.1f}%", inline=True
+        )
+
+        await interaction.followup.send(embed=embed)
+
+    # Statistiques d'une réunion par nom
+    @app_commands.command(
+        name="meeting_stats",
+        description="Voir les statistiques d'une réunion (nom partiel)",
+    )
+    @app_commands.describe(reunion="Nom ou partie du nom de la réunion")
+    async def meeting_stats(self, interaction: discord.Interaction, reunion: str):
+        await interaction.response.defer()
+
+        meetings = self.db.get_meeting_by_name(reunion)
+        if not meetings:
+            await interaction.followup.send(
+                f"❌ Aucune réunion trouvée avec le nom '{reunion}'", ephemeral=True
+            )
+            return
+
+        if len(meetings) > 1:
+            embed = discord.Embed(
+                title="⚠️ Plusieurs réunions trouvées",
+                description="Veuillez préciser en utilisant l'ID:",
+                color=discord.Color.orange(),
+            )
+            for meeting in meetings[:5]:
+                embed.add_field(
+                    name=f"#{meeting.id} - {meeting.title}",
+                    value=f"Date: {meeting.date.strftime('%d/%m/%Y %H:%M')}\n"
+                    f"Organisateur: <@{meeting.created_by}>",
+                    inline=False,
+                )
+            embed.set_footer(text="Utilisez: /meeting_stats_id [id]")
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
+        meeting = meetings[0]
+        stats = self.db.get_meeting_stats(meeting.id)
+        if not stats:
+            await interaction.followup.send("❌ Réunion introuvable", ephemeral=True)
+            return
+
+        meeting_data = stats["meeting_data"]
+        embed = discord.Embed(
+            title=f"📊 Statistiques - {meeting_data['title']}",
+            description=f"Date: {meeting_data['date'].strftime('%d/%m/%Y %H:%M')}",
             color=discord.Color.blue(),
             timestamp=discord.utils.utcnow(),
         )
@@ -397,7 +370,7 @@ class MeetingsCog(commands.Cog):
             f"✅ Présence modifiée: {membre.mention} → {statut}", ephemeral=True
         )
 
-    # Modifier la présence par nom de réunion (si unique)
+    # Modifier la présence par nom de réunion
     @app_commands.command(
         name="modifier_presence", description="Modifier la présence d'un membre"
     )
@@ -426,7 +399,6 @@ class MeetingsCog(commands.Cog):
             return
 
         if len(meetings) > 1:
-            # Afficher la liste des réunions similaires avec leur ID pour que l'admin choisisse
             embed = discord.Embed(
                 title="⚠️ Plusieurs réunions trouvées",
                 description="Précisez en utilisant l'ID: /modifier_presence_id [id]",
@@ -435,7 +407,7 @@ class MeetingsCog(commands.Cog):
             for meeting in meetings[:10]:
                 embed.add_field(
                     name=f"#{meeting.id} - {meeting.title}",
-                    value=f"Date: {meeting.date.strftime('%d/%m/%Y %H:%M')}\nOrganisateur: <@{meeting.created_by}>",
+                    value=f"Date: {meeting.date.strftime('%d/%m/%Y %H:%M')}",
                     inline=False,
                 )
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -443,7 +415,6 @@ class MeetingsCog(commands.Cog):
 
         meeting = meetings[0]
 
-        # Vérifier que l'appel a été validé
         if not meeting.attendance_validated:
             await interaction.followup.send(
                 "❌ L'appel n'a pas encore été validé pour cette réunion",
@@ -451,13 +422,11 @@ class MeetingsCog(commands.Cog):
             )
             return
 
-        # Récupérer le membre
         member = self.db.get_member(str(membre.id))
         if not member:
             await interaction.followup.send("❌ Membre non enregistré", ephemeral=True)
             return
 
-        # Statuts valides
         valid_statuses = ["present", "absent", "excused"]
         if statut not in valid_statuses:
             await interaction.followup.send(
@@ -466,7 +435,6 @@ class MeetingsCog(commands.Cog):
             )
             return
 
-        # Modifier la présence (utilise member.id - non discord id)
         self.db.record_attendance(
             meeting.id, member.id, statut, modified_by=str(interaction.user.id)
         )
@@ -518,459 +486,334 @@ class MeetingsCog(commands.Cog):
 
         await interaction.followup.send(embed=embed)
 
-    # Statistiques d'une réunion par nom
-    @app_commands.command(
-        name="meeting_stats",
-        description="Voir les statistiques d'une réunion (nom partiel)",
-    )
-    @app_commands.describe(reunion="Nom ou partie du nom de la réunion")
-    async def meeting_stats(self, interaction: discord.Interaction, reunion: str):
-        await interaction.response.defer()
 
-        meetings = self.db.get_meeting_by_name(reunion)
-        if not meetings:
-            await interaction.followup.send(
-                f"❌ Aucune réunion trouvée avec le nom '{reunion}'", ephemeral=True
-            )
-            return
+# Vue Admin améliorée pour gérer l'appel complet
+class AdminAttendanceView(discord.ui.View):
+    """Vue pour les admins permettant de faire l'appel complet avec gestion
+    individuelle de chaque membre et validation finale."""
 
-        if len(meetings) > 1:
-            embed = discord.Embed(
-                title="⚠️ Plusieurs réunions trouvées",
-                description="Veuillez préciser en utilisant l'ID:",
-                color=discord.Color.orange(),
-            )
-            for meeting in meetings[:5]:
-                embed.add_field(
-                    name=f"#{meeting.id} - {meeting.title}",
-                    value=f"Date: {meeting.date.strftime('%d/%m/%Y %H:%M')}\nOrganisateur: <@{meeting.created_by}>",
-                    inline=False,
-                )
-            embed.set_footer(text="Utilisez: /meeting_stats_id [id]")
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
-
-        meeting = meetings[0]
-        stats = self.db.get_meeting_stats(meeting.id)
-        if not stats:
-            await interaction.followup.send("❌ Réunion introuvable", ephemeral=True)
-            return
-
-        meeting = stats["meeting"]
-        embed = discord.Embed(
-            title=f"📊 Statistiques - {meeting.title}",
-            description=f"Date: {meeting.date.strftime('%d/%m/%Y %H:%M')}",
-            color=discord.Color.blue(),
-            timestamp=discord.utils.utcnow(),
-        )
-
-        embed.add_field(name="✅ Présents", value=stats["present"], inline=True)
-        embed.add_field(name="❌ Absents", value=stats["absent"], inline=True)
-        embed.add_field(name="🏥 Excusés", value=stats["excused"], inline=True)
-        embed.add_field(name="🎯 Attendus", value=stats["expected"], inline=True)
-        embed.add_field(
-            name="📈 Taux de participation", value=f"{stats['rate']:.1f}%", inline=True
-        )
-
-        await interaction.followup.send(embed=embed)
-
-
-# Vue pour l'appel avec validation
-class AttendanceView(discord.ui.View):
-
-    def __init__(self, meeting_id, db, initiator_id):
+    def __init__(self, meeting_id, db, initiator_id, expected_members):
         super().__init__(timeout=1800)  # 30 minutes
         self.meeting_id = meeting_id
         self.db = db
         self.initiator_id = initiator_id
-        self.attendees = {}  # {user_id: status}
+        self.members = expected_members
+        self.page = 0
+        self.members_per_page = 5
+        self.attendance_status = {}  # {member_id: status}
         self.validated = False
 
-    @discord.ui.button(label="✅ Présent", style=discord.ButtonStyle.success, row=0)
-    async def present(
+        # Initialiser avec les statuts existants en base de données
+        self._load_existing_attendance()
+
+    def _load_existing_attendance(self):
+        """Charger les présences déjà enregistrées"""
+        attendances = self.db.get_meeting_attendance(self.meeting_id)
+        for att, member in attendances:
+            self.attendance_status[member.id] = att.status
+
+    def get_current_page_members(self):
+        """Récupérer les membres de la page actuelle"""
+        start = self.page * self.members_per_page
+        end = start + self.members_per_page
+        return self.members[start:end]
+
+    def get_total_pages(self):
+        """Calculer le nombre total de pages"""
+        return (len(self.members) - 1) // self.members_per_page + 1
+
+    @discord.ui.select(
+        placeholder="Sélectionner un membre...", min_values=1, max_values=1, row=0
+    )
+    async def member_select(
+        self, interaction: discord.Interaction, select: discord.ui.Select
+    ):
+        """Sélecteur de membre pour la page actuelle"""
+        # Le select sera mis à jour dynamiquement
+        pass
+
+    @discord.ui.button(label="✅ Présent", style=discord.ButtonStyle.success, row=1)
+    async def mark_present(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        member = self.db.get_member(str(interaction.user.id))
+        await self._mark_status(interaction, "present")
 
-        if not member:
+    @discord.ui.button(label="❌ Absent", style=discord.ButtonStyle.danger, row=1)
+    async def mark_absent(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await self._mark_status(interaction, "absent")
+
+    @discord.ui.button(label="🏥 Excusé", style=discord.ButtonStyle.secondary, row=1)
+    async def mark_excused(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await self._mark_status(interaction, "excused")
+
+    async def _mark_status(self, interaction: discord.Interaction, status: str):
+        """Marquer le statut du membre sélectionné"""
+        if not hasattr(self, "selected_member_id") or not self.selected_member_id:
             await interaction.response.send_message(
-                "❌ Vous n'êtes pas enregistré", ephemeral=True
-            )
-            return
-
-        # Vérifier que le membre est concerné par la réunion
-        meeting = self.db.get_meeting(self.meeting_id)
-        target_roles = meeting.get_target_roles()
-
-        if "ALL" not in target_roles and member.role not in target_roles:
-            await interaction.response.send_message(
-                f"❌ Cette réunion concerne uniquement les pôles: {', '.join(target_roles)}",
+                "⚠️ Veuillez d'abord sélectionner un membre dans la liste",
                 ephemeral=True,
             )
             return
 
-        # Persister tout de suite
-        self.attendees[str(interaction.user.id)] = ("present", member.id)
-        try:
-            self.db.record_attendance(self.meeting_id, member.id, "present")
-        except Exception:
-            logger.exception("Erreur en enregistrant la présence")
-        await interaction.response.send_message("✅ Marqué présent", ephemeral=True)
-        await self.update_display(interaction)
+        # Enregistrer le statut
+        self.attendance_status[self.selected_member_id] = status
 
-    @discord.ui.button(label="❌ Absent", style=discord.ButtonStyle.danger, row=0)
-    async def absent(self, interaction: discord.Interaction, button: discord.ui.Button):
-        member = self.db.get_member(str(interaction.user.id))
+        # Persister en base de données
+        self.db.record_attendance(
+            self.meeting_id,
+            self.selected_member_id,
+            status,
+            modified_by=str(interaction.user.id),
+        )
 
-        if not member:
-            await interaction.response.send_message(
-                "❌ Vous n'êtes pas enregistré", ephemeral=True
-            )
-            return
+        # Trouver le membre pour afficher son nom
+        member_name = "Membre"
+        for m in self.members:
+            if m.id == self.selected_member_id:
+                member_name = m.full_name or m.username
+                break
 
-        # Vérifier que le membre est concerné
-        meeting = self.db.get_meeting(self.meeting_id)
-        target_roles = meeting.get_target_roles()
+        await interaction.response.send_message(
+            f"✅ {member_name} marqué comme {status}", ephemeral=True
+        )
 
-        if "ALL" not in target_roles and member.role not in target_roles:
-            await interaction.response.send_message(
-                f"❌ Cette réunion ne vous concerne pas", ephemeral=True
-            )
-            return
-
-        self.attendees[str(interaction.user.id)] = ("absent", member.id)
-        try:
-            self.db.record_attendance(self.meeting_id, member.id, "absent")
-        except Exception:
-            logger.exception("Erreur en enregistrant l'absence")
-        await interaction.response.send_message("❌ Marqué absent", ephemeral=True)
-        await self.update_display(interaction)
-
-    @discord.ui.button(label="🏥 Excusé", style=discord.ButtonStyle.secondary, row=0)
-    async def excused(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        member = self.db.get_member(str(interaction.user.id))
-
-        if not member:
-            await interaction.response.send_message(
-                "❌ Vous n'êtes pas enregistré", ephemeral=True
-            )
-            return
-
-        # Vérifier que le membre est concerné
-        meeting = self.db.get_meeting(self.meeting_id)
-        target_roles = meeting.get_target_roles()
-
-        if "ALL" not in target_roles and member.role not in target_roles:
-            await interaction.response.send_message(
-                f"❌ Cette réunion ne vous concerne pas", ephemeral=True
-            )
-            return
-
-        self.attendees[str(interaction.user.id)] = ("excused", member.id)
-        try:
-            self.db.record_attendance(self.meeting_id, member.id, "excused")
-        except Exception:
-            logger.exception("Erreur en enregistrant l'excuse")
-        await interaction.response.send_message("🏥 Marqué excusé", ephemeral=True)
+        # Rafraîchir l'affichage
         await self.update_display(interaction)
 
     @discord.ui.button(
-        label="📝 Valider l'appel", style=discord.ButtonStyle.primary, row=1
+        label="◀ Page précédente", style=discord.ButtonStyle.primary, row=2
     )
-    async def validate(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        # Vérifier les permissions
-        if str(interaction.user.id) != self.initiator_id:
-            member = self.db.get_member(str(interaction.user.id))
-            meeting = self.db.get_meeting(self.meeting_id)
-            is_organizer = member and member.id == meeting.organizer_id
-            is_admin = any(role.name in ADMIN_ROLES for role in interaction.user.roles)
-
-            if not (is_organizer or is_admin):
-                await interaction.response.send_message(
-                    "❌ Seul l'organisateur ou un admin peut valider l'appel!",
-                    ephemeral=True,
-                )
-                return
-
-        # Vérifier si la réunion a déjà été validée en base (protection contre doublons)
-        meeting_obj = self.db.get_meeting(self.meeting_id)
-        if meeting_obj and meeting_obj.attendance_validated:
-            self.validated = True
-            for item in self.children:
-                item.disabled = True
-            await interaction.response.send_message(
-                "✅ L'appel a déjà été validé", ephemeral=True
-            )
-            try:
-                await interaction.message.edit(view=self)
-            except:
-                pass
-            return
-
-        # Enregistrer toutes les présences
-        for discord_id, (status, member_id) in self.attendees.items():
-            self.db.record_attendance(self.meeting_id, member_id, status)
-
-        # Marquer comme validé
-        self.db.validate_attendance(self.meeting_id, str(interaction.user.id))
-        self.validated = True
-
-        # Désactiver les boutons
-        for item in self.children:
-            item.disabled = True
-
-        await interaction.response.edit_message(view=self)
-
-        # Message de confirmation
-        meeting = self.db.get_meeting(self.meeting_id)
-        embed = discord.Embed(
-            title="✅ Appel validé",
-            description=f"L'appel pour **{meeting.title}** a été validé",
-            color=discord.Color.green(),
-            timestamp=discord.utils.utcnow(),
-        )
-
-        # Statistiques
-        present = sum(
-            1 for _, (status, _) in self.attendees.items() if status == "present"
-        )
-        absent = sum(
-            1 for _, (status, _) in self.attendees.items() if status == "absent"
-        )
-        excused = sum(
-            1 for _, (status, _) in self.attendees.items() if status == "excused"
-        )
-
-        embed.add_field(name="✅ Présents", value=present, inline=True)
-        embed.add_field(name="❌ Absents", value=absent, inline=True)
-        embed.add_field(name="🏥 Excusés", value=excused, inline=True)
-
-        await interaction.followup.send(embed=embed)
-
-    # Mettre à jour l'affichage avec le compteur
-    async def update_display(self, interaction):
-        meeting = self.db.get_meeting(self.meeting_id)
-        target_roles = meeting.get_target_roles()
-
-        # Compter les statuts
-        present = sum(
-            1 for _, (status, _) in self.attendees.items() if status == "present"
-        )
-        absent = sum(
-            1 for _, (status, _) in self.attendees.items() if status == "absent"
-        )
-        excused = sum(
-            1 for _, (status, _) in self.attendees.items() if status == "excused"
-        )
-
-        # Mettre à jour l'embed
-        embed = interaction.message.embeds[0]
-
-        # Ajouter/Mettre à jour le field des statistiques
-        if len(embed.fields) > 1:
-            embed.remove_field(1)
-
-        stats_text = (
-            f"✅ Présents: {present}\n❌ Absents: {absent}\n🏥 Excusés: {excused}"
-        )
-        embed.add_field(name="📊 Statut actuel", value=stats_text, inline=False)
-
-        try:
-            await interaction.message.edit(embed=embed)
-        except:
-            pass  # Ignorer les erreurs de mise à jour
-
-
-class AdminAttendanceView(discord.ui.View):
-    """Vue éphemère pour les admins/organisateurs permettant de parcourir
-    la liste des membres attendus et de marquer individuellement leur statut.
-    Cette vue pagine par 8 membres et propose 3 boutons de statut + navigation.
-    """
-
-    def __init__(self, meeting_id, db, initiator_id, public_message=None, cog=None):
-        super().__init__(timeout=1800)
-        self.meeting_id = meeting_id
-        self.db = db
-        self.initiator_id = initiator_id
-        self.public_message = public_message
-        self.cog = cog
-        self.page = 0
-        self.selected_member = None
-
-        # charger membres attendus
-        meeting = self.db.get_meeting(meeting_id)
-        target_roles = meeting.get_target_roles() if meeting else ["ALL"]
-        self.members = self.db.get_members_by_roles(target_roles)
-
-        # Select pour choisir un membre sur la page
-        class MemberSelect(discord.ui.Select):
-            def __init__(inner_self, parent, options):
-                super().__init__(
-                    placeholder="Choisir un membre",
-                    min_values=1,
-                    max_values=1,
-                    options=options,
-                )
-                inner_self.parent = parent
-
-            async def callback(inner_self, interaction: discord.Interaction):
-                # set the selected member on parent
-                value = inner_self.values[0]
-                # value is member.discord_id
-                for m in inner_self.parent.members:
-                    if m.discord_id == value:
-                        inner_self.parent.selected_member = m
-                        break
-                await interaction.response.send_message(
-                    f"Membre sélectionné: {inner_self.parent.selected_member.full_name or inner_self.parent.selected_member.username}",
-                    ephemeral=True,
-                )
-
-        # initial select options
-        start = 0
-        block = self.members[start : start + 8]
-        options = [
-            discord.SelectOption(
-                label=(m.full_name or m.username), value=str(m.discord_id)
-            )
-            for m in block
-        ]
-        self.member_select = MemberSelect(self, options)
-        self.add_item(self.member_select)
-
-    async def _refresh_message(self, interaction):
-        # rebuild embed
-        meeting = self.db.get_meeting(self.meeting_id)
-        embed = discord.Embed(
-            title=f"Panneau admin - {meeting.title}",
-            description="Navigation: ← →. Sélectionnez un membre pour appliquer un statut.",
-            color=discord.Color.blurple(),
-        )
-        start = self.page * 8
-        block = self.members[start : start + 8]
-        for m in block:
-            display = m.full_name or m.username
-            embed.add_field(
-                name=f"{display}",
-                value=f"Discord: <@{m.discord_id}> | Role: {m.role}",
-                inline=False,
-            )
-
-        # Mettre à jour les options du select
-        try:
-            options = [
-                discord.SelectOption(
-                    label=(m.full_name or m.username), value=str(m.discord_id)
-                )
-                for m in block
-            ]
-            self.member_select.options = options
-        except Exception:
-            logger.exception("Erreur en mettant à jour le select de l'admin panel")
-
-        try:
-            await interaction.response.edit_message(embed=embed, view=self)
-        except Exception:
-            try:
-                await interaction.followup.send(embed=embed, view=self, ephemeral=True)
-            except Exception:
-                pass
-
-    @discord.ui.button(label="←", style=discord.ButtonStyle.secondary, row=0)
     async def prev_page(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         if self.page > 0:
             self.page -= 1
-        await self._refresh_message(interaction)
+            await self.update_display(interaction)
+        else:
+            await interaction.response.send_message(
+                "Vous êtes déjà à la première page", ephemeral=True
+            )
 
-    @discord.ui.button(label="→", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(
+        label="Page suivante ▶", style=discord.ButtonStyle.primary, row=2
+    )
     async def next_page(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        if (self.page + 1) * 8 < len(self.members):
+        if self.page < self.get_total_pages() - 1:
             self.page += 1
-        await self._refresh_message(interaction)
+            await self.update_display(interaction)
+        else:
+            await interaction.response.send_message(
+                "Vous êtes déjà à la dernière page", ephemeral=True
+            )
 
-    @discord.ui.button(label="Présent", style=discord.ButtonStyle.success, row=1)
-    async def mark_present(
+    @discord.ui.button(
+        label="🔄 Rafraîchir", style=discord.ButtonStyle.secondary, row=3
+    )
+    async def refresh(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        # marque tous les membres de la page comme présent
-        start = self.page * 8
-        block = self.members[start : start + 8]
-        for m in block:
-            try:
-                self.db.record_attendance(
-                    self.meeting_id,
-                    m.id,
-                    "present",
-                    modified_by=str(interaction.user.id),
-                )
-            except Exception:
-                logger.exception("Erreur en marquant présent via admin panel")
-        await interaction.response.send_message(
-            "✅ Page marquée présente", ephemeral=True
-        )
-        # Mettre à jour le message public si nécessaire
-        if self.public_message:
-            try:
-                await self.public_message.edit(
-                    view=(
-                        self.cog.active_meetings.get(self.meeting_id).view
-                        if self.cog and self.meeting_id in self.cog.active_meetings
-                        else None
-                    )
-                )
-            except Exception:
-                pass
-        await self._refresh_message(interaction)
+        await self.update_display(interaction)
 
-    @discord.ui.button(label="Absent", style=discord.ButtonStyle.danger, row=1)
-    async def mark_absent(
+    @discord.ui.button(
+        label="📋 Valider l'appel", style=discord.ButtonStyle.danger, row=3
+    )
+    async def validate_attendance(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        start = self.page * 8
-        block = self.members[start : start + 8]
-        for m in block:
-            try:
+        """Valider définitivement l'appel"""
+        if self.validated:
+            await interaction.response.send_message(
+                "✅ L'appel a déjà été validé", ephemeral=True
+            )
+            return
+
+        # Vérifier que l'utilisateur est autorisé
+        if str(interaction.user.id) != self.initiator_id:
+            member = self.db.get_member(str(interaction.user.id))
+            is_admin = any(role.name in ADMIN_ROLES for role in interaction.user.roles)
+            if not is_admin:
+                await interaction.response.send_message(
+                    "❌ Seul un administrateur peut valider l'appel", ephemeral=True
+                )
+                return
+
+        # Marquer les membres non marqués comme absents
+        for member in self.members:
+            if member.id not in self.attendance_status:
+                self.attendance_status[member.id] = "absent"
                 self.db.record_attendance(
                     self.meeting_id,
-                    m.id,
+                    member.id,
                     "absent",
                     modified_by=str(interaction.user.id),
                 )
-            except Exception:
-                logger.exception("Erreur en marquant absent via admin panel")
-        await interaction.response.send_message(
-            "❌ Page marquée absente", ephemeral=True
-        )
-        await self._refresh_message(interaction)
 
-    @discord.ui.button(label="Excusé", style=discord.ButtonStyle.secondary, row=1)
-    async def mark_excused(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        start = self.page * 8
-        block = self.members[start : start + 8]
-        for m in block:
-            try:
-                self.db.record_attendance(
-                    self.meeting_id,
-                    m.id,
-                    "excused",
-                    modified_by=str(interaction.user.id),
-                )
-            except Exception:
-                logger.exception("Erreur en marquant excusé via admin panel")
-        await interaction.response.send_message(
-            "🏥 Page marquée excusée", ephemeral=True
+        # Valider l'appel en base de données
+        self.db.validate_attendance(self.meeting_id, str(interaction.user.id))
+        self.validated = True
+
+        # Désactiver tous les boutons
+        for item in self.children:
+            item.disabled = True
+
+        # Créer le rapport final
+        present = sum(1 for s in self.attendance_status.values() if s == "present")
+        absent = sum(1 for s in self.attendance_status.values() if s == "absent")
+        excused = sum(1 for s in self.attendance_status.values() if s == "excused")
+        total = len(self.members)
+        rate = (present / total * 100) if total > 0 else 0
+
+        embed = discord.Embed(
+            title="✅ Appel validé",
+            description=f"L'appel a été validé avec succès",
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow(),
         )
-        await self._refresh_message(interaction)
+        embed.add_field(name="✅ Présents", value=f"{present}/{total}", inline=True)
+        embed.add_field(name="❌ Absents", value=f"{absent}/{total}", inline=True)
+        embed.add_field(name="🏥 Excusés", value=f"{excused}/{total}", inline=True)
+        embed.add_field(name="📈 Taux", value=f"{rate:.1f}%", inline=True)
+        embed.set_footer(text=f"Validé par {interaction.user.display_name}")
+
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    async def update_display(self, interaction: discord.Interaction):
+        """Mettre à jour l'affichage avec la page actuelle"""
+        if self.validated:
+            return
+
+        meeting = self.db.get_meeting(self.meeting_id)
+        target_roles = meeting.get_target_roles()
+        roles_text = "Tous" if "ALL" in target_roles else ", ".join(target_roles)
+
+        # Calculer les statistiques actuelles
+        present = sum(1 for s in self.attendance_status.values() if s == "present")
+        absent = sum(1 for s in self.attendance_status.values() if s == "absent")
+        excused = sum(1 for s in self.attendance_status.values() if s == "excused")
+        marked = present + absent + excused
+        total = len(self.members)
+
+        # Créer l'embed
+        embed = discord.Embed(
+            title=f"📢 Appel - {meeting.title}",
+            description=f"**Page {self.page + 1}/{self.get_total_pages()}**\n"
+            f"**Pôles:** {roles_text}\n"
+            f"**Progression:** {marked}/{total} membres traités",
+            color=discord.Color.blue(),
+        )
+
+        # Statistiques actuelles
+        embed.add_field(
+            name="📊 Statut actuel",
+            value=f"✅ Présents: {present}\n❌ Absents: {absent}\n🏥 Excusés: {excused}",
+            inline=True,
+        )
+
+        # Liste des membres de la page actuelle
+        page_members = self.get_current_page_members()
+        members_list = []
+
+        # Mettre à jour le select avec les membres de la page
+        select_options = []
+
+        for i, member in enumerate(page_members, 1):
+            status = self.attendance_status.get(member.id, "Non marqué")
+            status_icon = {
+                "present": "✅",
+                "absent": "❌",
+                "excused": "🏥",
+                "Non marqué": "⏳",
+            }.get(status, "⏳")
+
+            member_display = f"{i}. {status_icon} {member.full_name or member.username} ({member.role})"
+            members_list.append(member_display)
+
+            # Ajouter l'option au select
+            select_option = discord.SelectOption(
+                label=f"{member.full_name or member.username}",
+                value=str(member.id),
+                description=f"{member.role} - {status}",
+                emoji=status_icon,
+            )
+            select_options.append(select_option)
+
+        embed.add_field(
+            name="👥 Membres de cette page",
+            value="\n".join(members_list) if members_list else "Aucun membre",
+            inline=False,
+        )
+
+        # Mettre à jour le select
+        if select_options:
+            # Trouver et mettre à jour le select existant
+            for item in self.children:
+                if isinstance(item, discord.ui.Select):
+                    item.options = select_options
+
+                    # Définir le callback pour gérer la sélection
+                    async def select_callback(select_interaction: discord.Interaction):
+                        self.selected_member_id = int(item.values[0])
+                        # Trouver le nom du membre sélectionné
+                        selected_name = "Membre"
+                        for m in self.members:
+                            if m.id == self.selected_member_id:
+                                selected_name = m.full_name or m.username
+                                break
+                        await select_interaction.response.send_message(
+                            f"✅ {selected_name} sélectionné. Choisissez maintenant son statut.",
+                            ephemeral=True,
+                        )
+
+                    item.callback = select_callback
+                    break
+            else:
+                # Si pas de select trouvé, en créer un
+                select = discord.ui.Select(
+                    placeholder="Sélectionner un membre...",
+                    min_values=1,
+                    max_values=1,
+                    options=select_options,
+                    row=0,
+                )
+
+                async def select_callback(select_interaction: discord.Interaction):
+                    self.selected_member_id = int(select.values[0])
+                    selected_name = "Membre"
+                    for m in self.members:
+                        if m.id == self.selected_member_id:
+                            selected_name = m.full_name or m.username
+                            break
+                    await select_interaction.response.send_message(
+                        f"✅ {selected_name} sélectionné. Choisissez maintenant son statut.",
+                        ephemeral=True,
+                    )
+
+                select.callback = select_callback
+                self.add_item(select)
+
+        # Instructions
+        embed.add_field(
+            name="📝 Instructions",
+            value="1. Sélectionnez un membre dans la liste\n"
+            "2. Cliquez sur son statut (Présent/Absent/Excusé)\n"
+            "3. Naviguez entre les pages si nécessaire\n"
+            "4. Validez l'appel quand terminé",
+            inline=False,
+        )
+
+        embed.set_footer(text=f"Réunion du {meeting.date.strftime('%d/%m/%Y à %H:%M')}")
+
+        try:
+            await interaction.response.edit_message(embed=embed, view=self)
+        except discord.errors.InteractionResponded:
+            # Si l'interaction a déjà reçu une réponse, éditer le message original
+            await interaction.message.edit(embed=embed, view=self)
 
 
 async def setup(bot):

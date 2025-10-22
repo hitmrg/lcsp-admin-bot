@@ -148,7 +148,7 @@ class MembersCog(commands.Cog):
 
     # Mettre à jour un membre
     @app_commands.command(name="membre_update", description="Modifier un membre")
-    @app.commands.describe(
+    @app_commands.describe(
         user="Utilisateur Discord du membre",
         nom="Nouveau nom complet du membre (optionnel)",
         email="Nouvel email du membre (optionnel)",

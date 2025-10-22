@@ -245,6 +245,16 @@ class Database:
             if not meeting:
                 return None
 
+            # Extraire les données du meeting avant de fermer la session
+            meeting_data = {
+                "id": meeting.id,
+                "title": meeting.title,
+                "date": meeting.date,
+                "description": meeting.description,
+                "is_completed": meeting.is_completed,
+                "attendance_validated": meeting.attendance_validated,
+            }
+
             # Comptages des présences
             present = (
                 session.query(Attendance)
@@ -289,7 +299,7 @@ class Database:
             rate = (present / expected * 100) if expected > 0 else 0
 
             return {
-                "meeting": meeting,
+                "meeting_data": meeting_data,
                 "present": present,
                 "absent": absent,
                 "excused": excused,
