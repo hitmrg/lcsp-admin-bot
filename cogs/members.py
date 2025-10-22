@@ -8,20 +8,9 @@ import logging
 from config import ADMIN_ROLES
 from database import Database
 from models import MemberStatus
+from .admin import is_admin
 
 logger = logging.getLogger(__name__)
-
-
-def is_admin():
-    async def predicate(interaction: discord.Interaction):
-        member = interaction.user
-        if not isinstance(member, discord.Member):
-            member = interaction.guild.get_member(interaction.user.id)
-        if not member:
-            return False
-        return any(role.name in ADMIN_ROLES for role in member.roles)
-
-    return app_commands.check(predicate)
 
 
 # cog de gestion des membres
@@ -31,7 +20,15 @@ class MembersCog(commands.Cog):
         self.bot = bot
         self.db = Database()
 
+    # Ajouter un membre
     @app_commands.command(name="membre_add", description="Ajouter un membre")
+    @app_commands.describe(
+        user="Utilisateur Discord du membre",
+        nom="Nom complet du membre(Prénom.Initiale du nom)",
+        pole="Pôle du membre (DEV, IA, INFRA)",
+        email="Email du membre (optionnel)",
+        specialisation="Spécialisation du membre (optionnel)",
+    )
     @is_admin()
     async def add_member(
         self,
@@ -42,7 +39,6 @@ class MembersCog(commands.Cog):
         email: Optional[str] = None,
         specialisation: Optional[str] = None,
     ):
-        """Ajouter un nouveau membre (email optionnel)"""
         await interaction.response.defer()
 
         # Vérifier si le membre existe
@@ -94,13 +90,16 @@ class MembersCog(commands.Cog):
 
         await interaction.followup.send(embed=embed)
 
+    # Voir les informations d'un membre
     @app_commands.command(
         name="membre_info", description="Informations détaillées d'un membre"
+    )
+    @app_commands.describe(
+        user="Utilisateur Discord du membre (laisser vide pour vous-même)"
     )
     async def member_info(
         self, interaction: discord.Interaction, user: Optional[discord.Member] = None
     ):
-        """Voir les informations détaillées d'un membre"""
         await interaction.response.defer()
 
         target = user or interaction.user
@@ -147,7 +146,16 @@ class MembersCog(commands.Cog):
 
         await interaction.followup.send(embed=embed)
 
+    # Mettre à jour un membre
     @app_commands.command(name="membre_update", description="Modifier un membre")
+    @app.commands.describe(
+        user="Utilisateur Discord du membre",
+        nom="Nouveau nom complet du membre (optionnel)",
+        email="Nouvel email du membre (optionnel)",
+        pole="Nouveau pôle du membre (DEV, IA, INFRA) (optionnel)",
+        specialisation="Nouvelle spécialisation du membre (optionnel)",
+        statut="Nouveau statut du membre (actif, inactif, suspendu) (optionnel)",
+    )
     @is_admin()
     async def update_member(
         self,
@@ -159,7 +167,6 @@ class MembersCog(commands.Cog):
         specialisation: Optional[str] = None,
         statut: Optional[str] = None,  # actif, inactif, suspendu
     ):
-        """Modifier les informations d'un membre"""
         await interaction.response.defer(ephemeral=True)
 
         updates = {}
@@ -221,12 +228,13 @@ class MembersCog(commands.Cog):
         else:
             await interaction.followup.send(f"❌ Membre non trouvé", ephemeral=True)
 
+    # Supprimer un membre
     @app_commands.command(name="membre_delete", description="Supprimer un membre")
+    @app_commands.describe(user="Utilisateur Discord du membre")
     @is_admin()
     async def delete_member(
         self, interaction: discord.Interaction, user: discord.Member
     ):
-        """Supprimer un membre de la base de données"""
         await interaction.response.defer(ephemeral=True)
 
         if self.db.delete_member(str(user.id)):
@@ -242,8 +250,13 @@ class MembersCog(commands.Cog):
         else:
             await interaction.followup.send(f"❌ Membre non trouvé", ephemeral=True)
 
+    # Lister les membres
     @app_commands.command(
         name="membres", description="Liste des membres du laboratoire"
+    )
+    @app_commands.describe(
+        pole="Filtrer par pôle (DEV, IA, INFRA) (optionnel)",
+        statut="Filtrer par statut (actif, inactif, suspendu) (optionnel)",
     )
     async def list_members(
         self,
@@ -358,9 +371,10 @@ class MembersCog(commands.Cog):
             view = MemberListView(embeds)
             await interaction.followup.send(embed=embeds[0], view=view)
 
+    # Rechercher un membre
     @app_commands.command(name="membre_search", description="Rechercher un membre")
+    @app_commands.describe(recherche="Nom, username ou email à rechercher")
     async def search_member(self, interaction: discord.Interaction, recherche: str):
-        """Rechercher un membre par nom ou username"""
         await interaction.response.defer()
 
         members = self.db.get_all_members()
@@ -410,8 +424,8 @@ class MembersCog(commands.Cog):
         await interaction.followup.send(embed=embed)
 
 
+# Vue pour la pagination de la liste des membres
 class MemberListView(discord.ui.View):
-    """Vue pour la pagination de la liste des membres"""
 
     def __init__(self, embeds):
         super().__init__(timeout=180)  # 3 minutes
@@ -419,8 +433,8 @@ class MemberListView(discord.ui.View):
         self.current_page = 0
         self.update_buttons()
 
+    # Mettre à jour l'état des boutons
     def update_buttons(self):
-        """Mettre à jour l'état des boutons"""
         self.previous.disabled = self.current_page == 0
         self.next.disabled = self.current_page >= len(self.embeds) - 1
 
@@ -430,7 +444,6 @@ class MemberListView(discord.ui.View):
     async def previous(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        """Page précédente"""
         if self.current_page > 0:
             self.current_page -= 1
             self.update_buttons()
@@ -440,7 +453,6 @@ class MemberListView(discord.ui.View):
 
     @discord.ui.button(label="Suivant ▶", style=discord.ButtonStyle.primary)
     async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Page suivante"""
         if self.current_page < len(self.embeds) - 1:
             self.current_page += 1
             self.update_buttons()
@@ -450,7 +462,6 @@ class MemberListView(discord.ui.View):
 
     @discord.ui.button(label="🏠", style=discord.ButtonStyle.secondary)
     async def home(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Retour à la première page"""
         self.current_page = 0
         self.update_buttons()
         await interaction.response.edit_message(embed=self.embeds[0], view=self)

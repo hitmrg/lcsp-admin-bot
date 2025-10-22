@@ -44,6 +44,10 @@ except Exception as e:
     sys.exit(1)
 
 
+# Status des membres (Actif, Inactif, Suspendu)
+# Actif : participe régulièrement aux réunions et activités
+# Inactif : ne participe plus aux activités depuis un certain temps
+# Suspendu : exclu temporairement pour non-respect des règles
 class MemberStatus(enum.Enum):
     ACTIVE = "actif"
     INACTIVE = "inactif"
@@ -92,8 +96,8 @@ class Meeting(Base):
         "Member", back_populates="organized_meetings", foreign_keys=[organizer_id]
     )
 
+    # Retourne les rôles ciblés sous forme de liste
     def get_target_roles(self):
-        """Retourne la liste des rôles ciblés"""
         if not self.target_roles:
             return []
         try:
@@ -102,8 +106,8 @@ class Meeting(Base):
         except:
             return []
 
+    # Définit les rôles ciblés à partir d'une liste ou "ALL"
     def set_target_roles(self, roles):
-        """Définir les rôles ciblés"""
         if roles == "ALL" or roles == ["ALL"]:
             self.target_roles = json.dumps(["ALL"])
         else:
@@ -127,8 +131,8 @@ class Attendance(Base):
     meeting = relationship("Meeting", back_populates="attendances")
 
 
+# Initialise la base de données (crée les tables)
 def init_database():
-    """Initialiser la base de données"""
     try:
         Base.metadata.create_all(engine)
         print("✅ Tables de base de données créées/vérifiées")

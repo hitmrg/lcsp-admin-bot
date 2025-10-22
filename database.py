@@ -233,6 +233,70 @@ class Database:
                 result.append((att, member))
             return result
 
+    @staticmethod
+    def get_meeting_stats(meeting_id: int):
+        """Retourne des statistiques pour une réunion donnée:
+        - present, absent, excused counts
+        - expected attendees (selon target_roles)
+        - participation rate (en pourcentage)
+        """
+        with get_session() as session:
+            meeting = session.query(Meeting).filter(Meeting.id == meeting_id).first()
+            if not meeting:
+                return None
+
+            # Comptages des présences
+            present = (
+                session.query(Attendance)
+                .filter(
+                    Attendance.meeting_id == meeting_id, Attendance.status == "present"
+                )
+                .count()
+            )
+            absent = (
+                session.query(Attendance)
+                .filter(
+                    Attendance.meeting_id == meeting_id, Attendance.status == "absent"
+                )
+                .count()
+            )
+            excused = (
+                session.query(Attendance)
+                .filter(
+                    Attendance.meeting_id == meeting_id, Attendance.status == "excused"
+                )
+                .count()
+            )
+
+            # Calculer le nombre attendu selon les rôles ciblés
+            target_roles = meeting.get_target_roles()
+            if "ALL" in target_roles:
+                expected = (
+                    session.query(Member)
+                    .filter(Member.status == MemberStatus.ACTIVE)
+                    .count()
+                )
+            else:
+                expected = (
+                    session.query(Member)
+                    .filter(
+                        Member.role.in_(target_roles),
+                        Member.status == MemberStatus.ACTIVE,
+                    )
+                    .count()
+                )
+
+            rate = (present / expected * 100) if expected > 0 else 0
+
+            return {
+                "meeting": meeting,
+                "present": present,
+                "absent": absent,
+                "excused": excused,
+                "expected": expected,
+                "rate": rate,
+            }
+
     # --- Statistiques ---
     @staticmethod
     def get_member_stats(member_id: int, days=30):

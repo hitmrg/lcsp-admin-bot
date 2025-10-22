@@ -9,18 +9,20 @@ import io
 import csv
 from database import Database
 from models import MemberStatus
+from .admin import is_admin
 
 
+# Cog pour la génération de rapports et statistiques
 class ReportsCog(commands.Cog):
-    """Génération de rapports et statistiques du LCSP"""
 
     def __init__(self, bot):
         self.bot = bot
         self.db = Database()
 
+    # Statistiques générales
     @app_commands.command(name="stats", description="Statistiques générales du LCSP")
+    @app_commands.describe(jours="Nombre de jours à analyser (ex: 30)")
     async def stats(self, interaction: discord.Interaction, jours: Optional[int] = 30):
-        """Afficher les statistiques générales avec taux de participation global"""
         await interaction.response.defer()
 
         # Récupérer les stats globales
@@ -113,8 +115,13 @@ class ReportsCog(commands.Cog):
 
         await interaction.followup.send(embed=embed)
 
+    # Statistiques par pôle
     @app_commands.command(
         name="stats_pole", description="Statistiques détaillées d'un pôle"
+    )
+    @app_commands.describe(
+        pole="Pôle à analyser (DEV, IA, INFRA)",
+        jours="Nombre de jours à analyser (ex: 30)",
     )
     async def stats_pole(
         self,
@@ -122,7 +129,6 @@ class ReportsCog(commands.Cog):
         pole: str,  # DEV, IA, INFRA
         jours: Optional[int] = 30,
     ):
-        """Statistiques détaillées pour un pôle spécifique"""
         await interaction.response.defer()
 
         pole = pole.upper()
@@ -236,14 +242,18 @@ class ReportsCog(commands.Cog):
 
         await interaction.followup.send(embed=embed)
 
+    # Rapport d'activité complet
     @app_commands.command(name="rapport", description="Rapport d'activité détaillé")
+    @app_commands.describe(
+        jours="Nombre de jours à analyser (ex: 30)",
+        format="Format du rapport (embed ou file)",
+    )
     async def report(
         self,
         interaction: discord.Interaction,
         jours: Optional[int] = 30,
         format: Optional[str] = "embed",  # embed ou file
     ):
-        """Générer un rapport d'activité complet"""
         await interaction.response.defer()
 
         # Récupérer toutes les données
@@ -380,13 +390,16 @@ class ReportsCog(commands.Cog):
 
             await interaction.followup.send(embed=embed)
 
+    # Exporter les données en CSV
     @app_commands.command(name="export", description="Exporter toutes les données")
+    @app_commands.describe(
+        type="Type de données à exporter (membres, reunions, presences, complet)"
+    )
     async def export(
         self,
         interaction: discord.Interaction,
         type: Optional[str] = "membres",  # membres, reunions, presences, complet
     ):
-        """Exporter les données en CSV"""
         await interaction.response.defer(ephemeral=True)
 
         output = io.StringIO()

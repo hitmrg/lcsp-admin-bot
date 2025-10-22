@@ -24,16 +24,16 @@ intents.message_content = True
 intents.members = True
 
 
+# Bot Administratif LCSP
 class LCSPBot(commands.Bot):
-    """Bot administratif du Laboratoire de Cybersécurité SUPINFO Paris"""
 
     def __init__(self):
         super().__init__(
             command_prefix="!", intents=intents, description="Bot administratif LCSP"
         )
 
+    # Initialisation du bot
     async def setup_hook(self):
-        """Initialisation du bot"""
         # Charger les cogs
         cogs = ["cogs.admin", "cogs.members", "cogs.meetings", "cogs.reports"]
 
@@ -51,9 +51,8 @@ class LCSPBot(commands.Bot):
         except Exception as e:
             logger.error(f"❌ Erreur synchronisation: {e}")
 
-    # Evènement de démarrage
+    # Evènement de démarrage quand le bot est prêt
     async def on_ready(self):
-        """Événement déclenché quand le bot est prêt"""
         logger.info(f"🤖 {self.user} connecté!")
         logger.info(f"📊 Serveurs: {len(self.guilds)}")
 
@@ -65,8 +64,8 @@ class LCSPBot(commands.Bot):
             status=discord.Status.online,
         )
 
+    # Gestion des erreurs de commande (permission, arguments, etc.)
     async def on_command_error(self, ctx, error):
-        """Gestion globale des erreurs"""
         if isinstance(error, commands.CommandNotFound):
             return
         elif isinstance(error, commands.MissingRequiredArgument):
@@ -77,8 +76,8 @@ class LCSPBot(commands.Bot):
             logger.error(f"Erreur non gérée: {error}")
             await ctx.send("❌ Une erreur est survenue")
 
+    # Événement lors de l'ajout du bot à un serveur
     async def on_guild_join(self, guild):
-        """Événement lors de l'ajout à un serveur"""
         logger.info(f"➕ Ajouté au serveur: {guild.name} (ID: {guild.id})")
 
         # Envoyer un message de bienvenue au propriétaire
@@ -103,13 +102,15 @@ class LCSPBot(commands.Bot):
             except:
                 pass
 
+    # Événement lors de l'arrivée d'un nouveau membre
     async def on_member_join(self, member):
-        """Événement lors de l'arrivée d'un nouveau membre"""
         # Log
         logger.info(f"👤 Nouveau membre: {member} dans {member.guild}")
 
-        # Message de bienvenue (si canal défini)
-        welcome_channel = discord.utils.get(member.guild.channels, name="╭💬・général")
+        # Message de bienvenue
+        welcome_channel = discord.utils.get(
+            member.guild.channels, name="╭👋・bienvenue"
+        )
         if welcome_channel:
             embed = discord.Embed(
                 title=f"👋 Bienvenue au LCSP!",
@@ -132,8 +133,8 @@ class LCSPBot(commands.Bot):
 
 
 # Fonction principale
+# Lance le bot
 async def main():
-    """Lancer le bot"""
     # Vérifier le token
     token = os.getenv("DISCORD_TOKEN")
     if not token:

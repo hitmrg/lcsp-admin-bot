@@ -11,9 +11,9 @@ from database import Database
 logger = logging.getLogger(__name__)
 
 
+# Vérification que la personne qui tape la commande est administrateur
+# CAD, qu'elle possède un des rôles dans ADMIN_ROLES (actuellement il n'y a que : *)
 def is_admin():
-    """Vérificateur de permissions admin"""
-
     async def predicate(interaction: discord.Interaction):
         member = interaction.user
 
@@ -45,10 +45,10 @@ class AdminCog(commands.Cog):
         self.bot = bot
         self.db = Database()
 
+    # Initialise le serveur LCSP
     @app_commands.command(name="setup", description="Initialiser le serveur LCSP")
     @is_admin()
     async def setup(self, interaction: discord.Interaction):
-        """Initialiser la structure du serveur"""
         await interaction.response.defer()
 
         guild = interaction.guild
@@ -74,8 +74,6 @@ class AdminCog(commands.Cog):
         # Structure des catégories et canaux
         categories = {
             "👑 ADMINISTRATION": ["╭🔑・logs", "╭📑・documents", "╭📢・annonces"],
-            "🏛️ LABORATOIRE LCSP": ["╭💬・général", "╭📅・planning", "╭📊・rapports"],
-            "💻 PÔLES TECHNIQUES": ["╭🛠️・infra", "╭💾・dev", "╭🤖・ia"],
         }
 
         # Créer les catégories et canaux
@@ -134,7 +132,13 @@ class AdminCog(commands.Cog):
 
         await interaction.followup.send(embed=embed)
 
+    # Commande d'annonce avancée
     @app_commands.command(name="announce", description="Faire une annonce structurée")
+    @app_commands.describe(
+        ping_role="Rôle à mentionner (DEV, IA, INFRA, ALL)",
+        couleur="Couleur de l'embed (en anglais)",
+        footer="Texte du footer de l'embed",
+    )
     @is_admin()
     async def announce(
         self,
@@ -151,7 +155,6 @@ class AdminCog(commands.Cog):
         image_url: Optional[str] = None,
         footer: Optional[str] = None,
     ):
-        """Créer une annonce avec format enrichi"""
         await interaction.response.defer(ephemeral=True)
 
         # Définir la couleur
@@ -234,8 +237,13 @@ class AdminCog(commands.Cog):
             "✅ Annonce publiée avec succès!", ephemeral=True
         )
 
+    # Commande d'annonce simple
     @app_commands.command(
-        name="announce_simple", description="Faire une annonce simple (titre + message)"
+        name="announce_simple",
+        description="Faire une annonce simple (titre + message, couleur bleue)",
+    )
+    @app_commands.describe(
+        ping="Mentionner tout le monde (oui/non)",
     )
     @is_admin()
     async def announce_simple(
@@ -245,7 +253,6 @@ class AdminCog(commands.Cog):
         message: str,
         ping: Optional[bool] = False,
     ):
-        """Annonce simple pour les messages rapides"""
         await interaction.response.defer(ephemeral=True)
 
         embed = discord.Embed(
@@ -263,7 +270,12 @@ class AdminCog(commands.Cog):
         await interaction.channel.send(content=content, embed=embed)
         await interaction.followup.send("✅ Annonce envoyée", ephemeral=True)
 
+    # Commande de suppression de messages
     @app_commands.command(name="clear", description="Supprimer des messages")
+    @app_commands.describe(
+        nombre="Nombre de messages à supprimer (1-100)",
+        user="Supprimer uniquement les messages d'un utilisateur spécifique (optionnel)",
+    )
     @is_admin()
     async def clear(
         self,
@@ -271,7 +283,6 @@ class AdminCog(commands.Cog):
         nombre: int,
         user: Optional[discord.Member] = None,
     ):
-        """Supprimer un certain nombre de messages"""
         await interaction.response.defer(ephemeral=True)
 
         if nombre < 1 or nombre > 100:
@@ -295,10 +306,10 @@ class AdminCog(commands.Cog):
             f"✅ {len(deleted)} messages supprimés", ephemeral=True
         )
 
+    # Commande d'informations sur le serveur
     @app_commands.command(name="info", description="Informations sur le serveur")
     @is_admin()
     async def server_info(self, interaction: discord.Interaction):
-        """Afficher les informations du serveur"""
         await interaction.response.defer()
 
         guild = interaction.guild
@@ -354,5 +365,6 @@ class AdminCog(commands.Cog):
         await interaction.followup.send(embed=embed)
 
 
+# Fonction de setup du cog
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))
