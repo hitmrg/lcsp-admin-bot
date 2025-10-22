@@ -33,14 +33,31 @@ else:
 # Alternative : utiliser DATABASE_URL si fourni directement
 DATABASE_URL = os.getenv("DATABASE_URL", DB_URL)
 
-# Rôles autorisés
+# Rôles autorisés pour l'administration
 ADMIN_ROLES = ["*"]
+
+# Rôles des pôles techniques
 MEMBER_ROLES = ["INFRA", "DEV", "IA"]
 
+# Configuration des canaux (optionnel)
+ANNOUNCEMENT_CHANNEL = os.getenv("ANNOUNCEMENT_CHANNEL", "╭📢・annonces")
+MEETING_CHANNEL = os.getenv("MEETING_CHANNEL", "╭📅・planning")
+GENERAL_CHANNEL = os.getenv("GENERAL_CHANNEL", "╭💬・général")
+
+# Configuration des couleurs pour les embeds
+COLORS = {
+    "success": 0x00FF00,  # Vert
+    "error": 0xFF0000,  # Rouge
+    "info": 0x0099FF,  # Bleu
+    "warning": 0xFFAA00,  # Orange
+    "lcsp": 0x6B63FF,  # Violet LCSP
+}
+
 # Logging
-print(f"📊 Configuration DB:")
-print(f"   Host: {DB_HOST}")
-print(f"   Port: {DB_PORT}")
+print(f"📊 Configuration LCSP Bot:")
+print(f"   Host DB: {DB_HOST}")
+print(f"   Port DB: {DB_PORT}")
 print(f"   Database: {DB_NAME}")
-print(f"   User: {DB_USER}")
-print(f"   URL: postgresql://{DB_USER}:***@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+print(f"   User DB: {DB_USER}")
+print(f"   Guild ID: {GUILD_ID}")
+print(f"   URL DB: postgresql://{DB_USER}:***@{DB_HOST}:{DB_PORT}/{DB_NAME}")

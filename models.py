@@ -14,6 +14,7 @@ from sqlalchemy.orm import relationship, sessionmaker
 from datetime import datetime
 import enum
 import sys
+import json
 
 # Import config avec gestion d'erreur
 try:
@@ -56,27 +57,59 @@ class Member(Base):
     discord_id = Column(String(32), unique=True, nullable=False)
     username = Column(String(100), nullable=False)
     full_name = Column(String(200))
-    email = Column(String(200))
-    role = Column(String(100))
+    email = Column(String(200), nullable=True)  # Email optionnel
+    role = Column(String(100))  # DEV, IA, INFRA
     specialization = Column(String(200))
     status = Column(Enum(MemberStatus), default=MemberStatus.ACTIVE)
     joined_at = Column(DateTime, default=datetime.utcnow)
     last_active = Column(DateTime, default=datetime.utcnow)
 
     attendances = relationship("Attendance", back_populates="member")
+    organized_meetings = relationship(
+        "Meeting", back_populates="organizer", foreign_keys="Meeting.organizer_id"
+    )
 
 
 class Meeting(Base):
     __tablename__ = "meetings"
 
     id = Column(Integer, primary_key=True)
-    title = Column(String(200), nullable=False)
+    title = Column(
+        String(200), nullable=False, index=True
+    )  # Index pour recherche par nom
     description = Column(Text)
     date = Column(DateTime, nullable=False)
-    created_by = Column(String(32))
+    created_by = Column(String(32))  # Discord ID du créateur
+    organizer_id = Column(Integer, ForeignKey("members.id"))  # Organisateur (membre)
+    target_roles = Column(Text)  # Rôles ciblés (JSON: ["DEV", "IA"] ou "ALL")
     is_completed = Column(Boolean, default=False)
+    attendance_validated = Column(Boolean, default=False)  # Appel validé
+    attendance_validated_at = Column(DateTime)  # Date de validation
+    attendance_validated_by = Column(String(32))  # Discord ID de qui a validé
 
     attendances = relationship("Attendance", back_populates="meeting")
+    organizer = relationship(
+        "Member", back_populates="organized_meetings", foreign_keys=[organizer_id]
+    )
+
+    def get_target_roles(self):
+        """Retourne la liste des rôles ciblés"""
+        if not self.target_roles:
+            return []
+        try:
+            roles = json.loads(self.target_roles)
+            return roles if isinstance(roles, list) else []
+        except:
+            return []
+
+    def set_target_roles(self, roles):
+        """Définir les rôles ciblés"""
+        if roles == "ALL" or roles == ["ALL"]:
+            self.target_roles = json.dumps(["ALL"])
+        else:
+            self.target_roles = json.dumps(
+                roles if isinstance(roles, list) else [roles]
+            )
 
 
 class Attendance(Base):
@@ -85,8 +118,10 @@ class Attendance(Base):
     id = Column(Integer, primary_key=True)
     member_id = Column(Integer, ForeignKey("members.id"))
     meeting_id = Column(Integer, ForeignKey("meetings.id"))
-    status = Column(String(20), default="present")
+    status = Column(String(20), default="present")  # present, absent, excused
     timestamp = Column(DateTime, default=datetime.utcnow)
+    modified_at = Column(DateTime)  # Si modifié après validation
+    modified_by = Column(String(32))  # Discord ID de qui a modifié
 
     member = relationship("Member", back_populates="attendances")
     meeting = relationship("Meeting", back_populates="attendances")
