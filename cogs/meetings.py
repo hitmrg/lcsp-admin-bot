@@ -195,20 +195,37 @@ class MeetingsCog(commands.Cog):
         await self._create_attendance_view(interaction, meeting)
 
     async def _create_attendance_view(self, interaction, meeting):
-        """Méthode helper pour créer et afficher la vue d'appel admin"""
         target_roles = meeting.get_target_roles()
         roles_text = "Tous" if "ALL" in target_roles else ", ".join(target_roles)
 
         # Récupérer les membres attendus
         expected_members = self.db.get_members_by_roles(target_roles)
 
+        if not expected_members:
+            await interaction.followup.send(
+                "❌ Aucun membre correspondant aux rôles de cette réunion n'a été trouvé.",
+                ephemeral=True,
+            )
+            return
+
+        # Vérifier qu'il y a au moins un membre sur la première page
+        first_page_members = expected_members[:5]  # 5 membres par page
+        if not first_page_members:
+            await interaction.followup.send(
+                "❌ Erreur: Aucun membre à afficher sur la première page.",
+                ephemeral=True,
+            )
+            return
+
         # Créer l'embed principal
         embed = discord.Embed(
             title=f"📢 Appel Administratif - {meeting.title}",
-            description=f"**Réunion ID:** {meeting.id}\n"
-            f"**Pôles concernés:** {roles_text}\n"
-            f"**Membres attendus:** {len(expected_members)}\n\n"
-            "Utilisez l'interface ci-dessous pour gérer l'appel.",
+            description=(
+                f"**Réunion ID:** {meeting.id}\n"
+                f"**Pôles concernés:** {roles_text}\n"
+                f"**Membres attendus:** {len(expected_members)}\n\n"
+                "Utilisez l'interface ci-dessous pour gérer l'appel."
+            ),
             color=discord.Color.blue(),
             timestamp=meeting.date,
         )
@@ -219,14 +236,23 @@ class MeetingsCog(commands.Cog):
             inline=False,
         )
 
-        # Créer la vue Admin
-        admin_view = AdminAttendanceView(
-            meeting.id, self.db, str(interaction.user.id), expected_members
-        )
+        # Créer la vue Admin avec les membres de la première page
+        try:
+            admin_view = AdminAttendanceView(
+                meeting.id, self.db, str(interaction.user.id), expected_members
+            )
 
-        # Envoyer le message avec la vue
-        message = await interaction.followup.send(embed=embed, view=admin_view)
-        self.active_meetings[meeting.id] = message
+            # Envoyer le message avec la vue
+            message = await interaction.followup.send(embed=embed, view=admin_view)
+            self.active_meetings[meeting.id] = message
+
+        except Exception as e:
+            logger.error(f"Erreur lors de la création de la vue d'appel: {str(e)}")
+            await interaction.followup.send(
+                "❌ Une erreur est survenue lors de la création de l'interface d'appel.",
+                ephemeral=True,
+            )
+            return
 
     # Statistiques d'une réunion par ID
     @app_commands.command(
@@ -489,9 +515,6 @@ class MeetingsCog(commands.Cog):
 
 # Vue Admin améliorée pour gérer l'appel complet
 class AdminAttendanceView(discord.ui.View):
-    """Vue pour les admins permettant de faire l'appel complet avec gestion
-    individuelle de chaque membre et validation finale."""
-
     def __init__(self, meeting_id, db, initiator_id, expected_members):
         super().__init__(timeout=1800)  # 30 minutes
         self.meeting_id = meeting_id
@@ -500,11 +523,61 @@ class AdminAttendanceView(discord.ui.View):
         self.members = expected_members
         self.page = 0
         self.members_per_page = 5
-        self.attendance_status = {}  # {member_id: status}
+        self.attendance_status = {}
         self.validated = False
 
-        # Initialiser avec les statuts existants en base de données
+        # Initialiser avec les statuts existants
         self._load_existing_attendance()
+        
+        # Initialiser (ou mettre à jour) le select décoré défini plus bas
+        first_page_members = self.get_current_page_members()
+        select_options = []
+        if first_page_members:
+            for member in first_page_members:
+                select_options.append(
+                    discord.SelectOption(
+                        label=self._truncate_name(member.full_name or member.username),
+                        value=str(member.id),
+                        description=member.role,
+                        emoji="⏳",
+                    )
+                )
+
+        # Rechercher un select existant (celui décoré avec @discord.ui.select)
+        for item in self.children:
+            if isinstance(item, discord.ui.Select):
+                # Si on a des options, on les applique, sinon on laisse le placeholder
+                if select_options:
+                    item.options = select_options
+
+                # (re)définir un callback sûr qui met la selected_member_id
+                async def _select_callback(select_interaction: discord.Interaction):
+                    try:
+                        sel = int(item.values[0])
+                    except Exception:
+                        await select_interaction.response.send_message(
+                            "⚠️ Sélection invalide", ephemeral=True
+                        )
+                        return
+
+                    self.selected_member_id = sel
+                    selected_name = next(
+                        (m.full_name or m.username for m in self.members if m.id == self.selected_member_id),
+                        "Membre",
+                    )
+                    await select_interaction.response.send_message(
+                        f"✅ {selected_name} sélectionné. Choisissez maintenant son statut.",
+                        ephemeral=True,
+                    )
+
+                item.callback = _select_callback
+                break
+
+    def _truncate_name(self, name: str, max_length: int = 25) -> str:
+        """Tronque un nom s'il est trop long"""
+        if len(name) <= max_length:
+            return name
+        return name[:max_length-3] + "..."
 
     def _load_existing_attendance(self):
         """Charger les présences déjà enregistrées"""

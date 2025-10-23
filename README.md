@@ -40,3 +40,10 @@
 - ✅👤`/stats_pole [poles] [jours]` - Affiche les statistiques d'un pole
 - ✅👤`/rapport [jours] [format]` - Rapport d'activité
 - ✅👤`/export [type]` - Exporter les informations
+
+### TROUBLESHOOTING :
+
+#### "exec /app/docker-entrypoint.sh: no such file or directory"
+
+- exécute le script suivant : `./fix-line.sh`
+- Vous pouvez maintenant déployer sans problème : `./deploy.sh`

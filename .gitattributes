@@ -1,0 +1,19 @@
+# Force les fins de ligne Unix pour les scripts shell
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
+
+# Force les fins de ligne Unix pour les Dockerfiles
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+
+# Force les fins de ligne Unix pour les fichiers SQL
+*.sql text eol=lf
+
+# Python files
+*.py text eol=lf
+requirements.txt text eol=lf
+
+# Configuration files
+.env* text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
