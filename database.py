@@ -172,6 +172,32 @@ class Database:
                 session.expunge(m)
             return meetings
 
+    @staticmethod
+    def get_member_upcoming_meetings(member_id: int):
+        """Récupérer les réunions à venir pour un membre"""
+        with get_session() as session:
+            member = session.query(Member).filter(Member.id == member_id).first()
+            if not member:
+                return []
+            
+            # Récupérer toutes les réunions à venir
+            meetings = (
+                session.query(Meeting)
+                .filter(Meeting.date >= datetime.utcnow())
+                .filter(Meeting.is_completed == False)
+                .all()
+            )
+            
+            # Filtrer selon le rôle du membre
+            upcoming = []
+            for meeting in meetings:
+                target_roles = meeting.get_target_roles()
+                if "ALL" in target_roles or member.role in target_roles:
+                    session.expunge(meeting)
+                    upcoming.append(meeting)
+                    
+            return upcoming
+
     # --- Présence ---
     @staticmethod
     def record_attendance(
@@ -205,13 +231,31 @@ class Database:
 
     @staticmethod
     def validate_attendance(meeting_id: int, validated_by: str):
-        """Valider l'appel d'une réunion"""
+        """Valider l'appel d'une réunion et la marquer comme complétée"""
         with get_session() as session:
             meeting = session.query(Meeting).filter(Meeting.id == meeting_id).first()
             if meeting:
                 meeting.attendance_validated = True
                 meeting.attendance_validated_at = datetime.utcnow()
                 meeting.attendance_validated_by = validated_by
+                # IMPORTANT: Marquer la réunion comme complétée pour les statistiques
+                meeting.is_completed = True
+                
+                # Mettre à jour last_active pour tous les membres présents
+                attendances = (
+                    session.query(Attendance)
+                    .filter(
+                        Attendance.meeting_id == meeting_id,
+                        Attendance.status == "present"
+                    )
+                    .all()
+                )
+                
+                for att in attendances:
+                    member = session.query(Member).filter(Member.id == att.member_id).first()
+                    if member:
+                        member.last_active = datetime.utcnow()
+                
                 session.flush()
                 return True
             return False
@@ -235,11 +279,7 @@ class Database:
 
     @staticmethod
     def get_meeting_stats(meeting_id: int):
-        """Retourne des statistiques pour une réunion donnée:
-        - present, absent, excused counts
-        - expected attendees (selon target_roles)
-        - participation rate (en pourcentage)
-        """
+        """Retourne des statistiques pour une réunion donnée"""
         with get_session() as session:
             meeting = session.query(Meeting).filter(Meeting.id == meeting_id).first()
             if not meeting:
@@ -310,57 +350,79 @@ class Database:
     # --- Statistiques ---
     @staticmethod
     def get_member_stats(member_id: int, days=30):
+        """Calcule les statistiques d'un membre incluant les réunions à venir"""
         with get_session() as session:
             since = datetime.utcnow() - timedelta(days=days)
 
             # Récupérer le membre pour son rôle
             member = session.query(Member).filter(Member.id == member_id).first()
             if not member:
-                return {"total": 0, "attended": 0, "rate": 0}
+                return {
+                    "total": 0, 
+                    "attended": 0, 
+                    "rate": 0,
+                    "upcoming": 0,
+                    "completed": 0
+                }
 
-            # Meetings concernant ce membre
-            all_meetings = (
+            # Meetings COMPLÉTÉS concernant ce membre
+            all_completed_meetings = (
                 session.query(Meeting)
                 .filter(
                     Meeting.date >= since,
                     Meeting.date <= datetime.utcnow(),
-                    Meeting.is_completed == True,
+                    Meeting.is_completed == True,  # Seulement les réunions complétées
+                    Meeting.attendance_validated == True  # ET validées
                 )
                 .all()
             )
 
-            # Filtrer par rôle ciblé
-            relevant_meetings = []
-            for meeting in all_meetings:
+            # Filtrer par rôle ciblé pour les réunions complétées
+            relevant_completed = []
+            for meeting in all_completed_meetings:
                 target_roles = meeting.get_target_roles()
                 if "ALL" in target_roles or member.role in target_roles:
-                    relevant_meetings.append(meeting.id)
+                    relevant_completed.append(meeting.id)
 
-            total_meetings = len(relevant_meetings)
+            total_completed = len(relevant_completed)
 
-            # Compter les présences
+            # Compter les présences sur les réunions complétées
             attended = (
-                (
-                    session.query(Attendance)
-                    .filter(
-                        Attendance.member_id == member_id,
-                        Attendance.status == "present",
-                        (
-                            Attendance.meeting_id.in_(relevant_meetings)
-                            if relevant_meetings
-                            else False
-                        ),
-                    )
-                    .count()
+                session.query(Attendance)
+                .filter(
+                    Attendance.member_id == member_id,
+                    Attendance.status == "present",
+                    (
+                        Attendance.meeting_id.in_(relevant_completed)
+                        if relevant_completed
+                        else False
+                    ),
                 )
-                if relevant_meetings
-                else 0
+                .count()
+            ) if relevant_completed else 0
+
+            # Meetings À VENIR concernant ce membre
+            upcoming_meetings = (
+                session.query(Meeting)
+                .filter(
+                    Meeting.date >= datetime.utcnow(),
+                    Meeting.is_completed == False
+                )
+                .all()
             )
+            
+            upcoming_count = 0
+            for meeting in upcoming_meetings:
+                target_roles = meeting.get_target_roles()
+                if "ALL" in target_roles or member.role in target_roles:
+                    upcoming_count += 1
 
             return {
-                "total": total_meetings,
+                "total": total_completed,
                 "attended": attended,
-                "rate": (attended / total_meetings * 100) if total_meetings > 0 else 0,
+                "rate": (attended / total_completed * 100) if total_completed > 0 else 0,
+                "upcoming": upcoming_count,
+                "completed": total_completed
             }
 
     @staticmethod
@@ -382,27 +444,45 @@ class Database:
                     "members_count": 0,
                     "avg_attendance_rate": 0,
                     "total_meetings": 0,
+                    "upcoming_meetings": 0,
                     "top_members": [],
                 }
 
-            # Meetings concernant ce pôle
-            all_meetings = (
+            # Meetings COMPLÉTÉS concernant ce pôle
+            all_completed = (
                 session.query(Meeting)
                 .filter(
                     Meeting.date >= since,
                     Meeting.date <= datetime.utcnow(),
                     Meeting.is_completed == True,
+                    Meeting.attendance_validated == True
                 )
                 .all()
             )
 
-            relevant_meetings = []
-            for meeting in all_meetings:
+            relevant_completed = []
+            for meeting in all_completed:
                 target_roles = meeting.get_target_roles()
                 if "ALL" in target_roles or role in target_roles:
-                    relevant_meetings.append(meeting.id)
+                    relevant_completed.append(meeting.id)
 
-            # Calculer le taux de présence moyen
+            # Meetings À VENIR concernant ce pôle
+            upcoming = (
+                session.query(Meeting)
+                .filter(
+                    Meeting.date >= datetime.utcnow(),
+                    Meeting.is_completed == False
+                )
+                .all()
+            )
+            
+            upcoming_count = 0
+            for meeting in upcoming:
+                target_roles = meeting.get_target_roles()
+                if "ALL" in target_roles or role in target_roles:
+                    upcoming_count += 1
+
+            # Calculer le taux de présence moyen sur les réunions complétées
             total_rate = 0
             member_stats = []
 
@@ -424,7 +504,8 @@ class Database:
                 "role": role,
                 "members_count": len(members),
                 "avg_attendance_rate": total_rate / len(members) if members else 0,
-                "total_meetings": len(relevant_meetings),
+                "total_meetings": len(relevant_completed),
+                "upcoming_meetings": upcoming_count,
                 "top_members": member_stats[:5],  # Top 5
             }
 
@@ -441,25 +522,37 @@ class Database:
                 .count()
             )
 
-            # Total réunions
-            total_meetings = (
+            # Total réunions COMPLÉTÉES ET VALIDÉES
+            total_completed = (
                 session.query(Meeting)
                 .filter(
                     Meeting.date >= since,
                     Meeting.date <= datetime.utcnow(),
                     Meeting.is_completed == True,
+                    Meeting.attendance_validated == True
+                )
+                .count()
+            )
+            
+            # Total réunions À VENIR
+            total_upcoming = (
+                session.query(Meeting)
+                .filter(
+                    Meeting.date >= datetime.utcnow(),
+                    Meeting.is_completed == False
                 )
                 .count()
             )
 
-            # Calcul du taux de participation global
-            if total_meetings > 0:
-                total_expected = (
+            # Calcul du taux de participation global sur les réunions complétées
+            if total_completed > 0:
+                completed_meetings = (
                     session.query(Meeting)
                     .filter(
                         Meeting.date >= since,
                         Meeting.date <= datetime.utcnow(),
                         Meeting.is_completed == True,
+                        Meeting.attendance_validated == True
                     )
                     .all()
                 )
@@ -467,7 +560,7 @@ class Database:
                 total_attendances = 0
                 total_expected_attendances = 0
 
-                for meeting in total_expected:
+                for meeting in completed_meetings:
                     target_roles = meeting.get_target_roles()
                     if "ALL" in target_roles:
                         expected = active_members
@@ -503,7 +596,8 @@ class Database:
 
             return {
                 "active_members": active_members,
-                "total_meetings": total_meetings,
+                "total_meetings": total_completed,
+                "upcoming_meetings": total_upcoming,
                 "global_attendance_rate": global_rate,
                 "period_days": days,
             }

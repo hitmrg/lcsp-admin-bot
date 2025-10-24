@@ -45,7 +45,8 @@ class ReportsCog(commands.Cog):
         embed.add_field(
             name="🏛️ Vue d'ensemble",
             value=f"**Membres actifs:** {global_stats['active_members']}\n"
-            f"**Réunions tenues:** {global_stats['total_meetings']}\n"
+            f"**Réunions complétées:** {global_stats['total_meetings']}\n"
+            f"**Réunions à venir:** {global_stats.get('upcoming_meetings', 0)}\n"
             f"**Taux de participation global:** {global_stats['global_attendance_rate']:.1f}%",
             inline=False,
         )
@@ -61,7 +62,8 @@ class ReportsCog(commands.Cog):
 
             value = f"**Membres:** {stats['members_count']}\n"
             value += f"**Taux moyen:** {stats['avg_attendance_rate']:.1f}%\n"
-            value += f"**Réunions:** {stats['total_meetings']}"
+            value += f"**Complétées:** {stats['total_meetings']}\n"
+            value += f"**À venir:** {stats.get('upcoming_meetings', 0)}"
 
             embed.add_field(name=f"{icon} Pôle {pole}", value=value, inline=True)
 
@@ -79,6 +81,7 @@ class ReportsCog(commands.Cog):
                         "rate": stats["rate"],
                         "attended": stats["attended"],
                         "total": stats["total"],
+                        "upcoming": stats.get("upcoming", 0),
                     }
                 )
 
@@ -162,7 +165,8 @@ class ReportsCog(commands.Cog):
         embed.add_field(
             name="📊 Vue d'ensemble",
             value=f"**Membres actifs:** {stats['members_count']}\n"
-            f"**Réunions concernées:** {stats['total_meetings']}\n"
+            f"**Réunions complétées:** {stats['total_meetings']}\n"
+            f"**Réunions à venir:** {stats.get('upcoming_meetings', 0)}\n"
             f"**Taux de participation moyen:** {stats['avg_attendance_rate']:.1f}%",
             inline=False,
         )
@@ -276,6 +280,7 @@ class ReportsCog(commands.Cog):
                     "Réunions Total",
                     "Présences",
                     "Taux (%)",
+                    "Réunions À Venir",
                     "Membre Depuis",
                     "Dernière Activité",
                 ]
@@ -294,6 +299,7 @@ class ReportsCog(commands.Cog):
                         stats["total"],
                         stats["attended"],
                         f"{stats['rate']:.1f}",
+                        stats.get("upcoming", 0),
                         member.joined_at.strftime("%d/%m/%Y"),
                         member.last_active.strftime("%d/%m/%Y"),
                     ]
@@ -323,7 +329,8 @@ class ReportsCog(commands.Cog):
                 name="📈 Résumé exécutif",
                 value=f"**Période analysée:** {jours} jours\n"
                 f"**Membres actifs:** {global_stats['active_members']}\n"
-                f"**Réunions tenues:** {global_stats['total_meetings']}\n"
+                f"**Réunions complétées:** {global_stats['total_meetings']}\n"
+                f"**Réunions à venir:** {global_stats.get('upcoming_meetings', 0)}\n"
                 f"**Taux participation global:** {global_stats['global_attendance_rate']:.1f}%",
                 inline=False,
             )
@@ -552,7 +559,8 @@ class ReportsCog(commands.Cog):
             writer.writerow(["=== STATISTIQUES (30 JOURS) ==="])
             stats = self.db.get_global_stats(days=30)
             writer.writerow(["Membres actifs", stats["active_members"]])
-            writer.writerow(["Réunions tenues", stats["total_meetings"]])
+            writer.writerow(["Réunions complétées", stats["total_meetings"]])
+            writer.writerow(["Réunions à venir", stats.get("upcoming_meetings", 0)])
             writer.writerow(
                 ["Taux participation global", f"{stats['global_attendance_rate']:.1f}%"]
             )
@@ -560,7 +568,7 @@ class ReportsCog(commands.Cog):
             # Stats par pôle
             writer.writerow([])
             writer.writerow(["=== STATS PAR PÔLE ==="])
-            writer.writerow(["Pôle", "Membres", "Taux Participation"])
+            writer.writerow(["Pôle", "Membres", "Taux Participation", "Réunions à venir"])
 
             for pole in ["DEV", "IA", "INFRA"]:
                 pole_stats = self.db.get_role_stats(pole, days=30)
@@ -569,6 +577,7 @@ class ReportsCog(commands.Cog):
                         pole,
                         pole_stats["members_count"],
                         f"{pole_stats['avg_attendance_rate']:.1f}%",
+                        pole_stats.get("upcoming_meetings", 0),
                     ]
                 )
 

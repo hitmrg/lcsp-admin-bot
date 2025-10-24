@@ -112,6 +112,9 @@ class MembersCog(commands.Cog):
         # Calculer les stats
         stats = self.db.get_member_stats(member.id)
 
+        # Récupérer les réunions à venir
+        upcoming_meetings = self.db.get_member_upcoming_meetings(member.id)
+
         # Créer l'embed
         embed = discord.Embed(title=f"👤 Fiche membre LCSP", color=discord.Color.blue())
         embed.set_thumbnail(url=target.display_avatar.url)
@@ -134,13 +137,28 @@ class MembersCog(commands.Cog):
         )
 
         embed.add_field(
-            name="📊 Statistiques",
+            name="📊 Statistiques (30 derniers jours)",
             value=f"**Statut:** {member.status.value}\n"
             f"**Membre depuis:** {member.joined_at.strftime('%d/%m/%Y')}\n"
             f"**Dernière activité:** {member.last_active.strftime('%d/%m/%Y')}\n"
-            f"**Présence (30j):** {stats['rate']:.1f}% ({stats['attended']}/{stats['total']} réunions)",
+            f"**Présence:** {stats['rate']:.1f}% ({stats['attended']}/{stats['total']} réunions)\n"
+            f"**Réunions complétées:** {stats.get('completed', stats['total'])}\n"
+            f"**Réunions à venir:** {stats.get('upcoming', 0)}",
             inline=False,
         )
+
+        # Ajouter les prochaines réunions si il y en a
+        if upcoming_meetings:
+            meetings_text = ""
+            for i, meeting in enumerate(upcoming_meetings[:5], 1):  # Limiter à 5
+                meetings_text += f"{i}. **{meeting.title}**\n"
+                meetings_text += f"   📅 {meeting.date.strftime('%d/%m/%Y à %H:%M')}\n"
+            
+            embed.add_field(
+                name="📅 Prochaines réunions",
+                value=meetings_text,
+                inline=False,
+            )
 
         embed.set_footer(text=f"ID Membre: {member.id}")
 
