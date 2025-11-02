@@ -121,6 +121,110 @@ class MeetingsCog(commands.Cog):
             content=" ".join(mentions) if mentions else None, embed=embed
         )
 
+    # Commande pour supprimer un meeting par le nom
+    @app_commands.command(
+        name="meeting_delete", description="Supprimer une réunion par nom"
+    )
+    @app_commands.describe(reunion="Nom ou partie du nom de la réunion")
+    @is_admin()
+    async def delete_meeting(self, interaction: discord.Interaction, reunion: str):
+        await interaction.response.defer()
+
+        if self.db.delete_meeting(str(reunion)):
+            await interaction.followup.send(f"✅ Réunion '{reunion}' supprimée")
+        else:
+            await interaction.followup.send(f"❌ Meeting non trouvé", ephemeral=True)
+
+    # Commande pour supprimer un meeting par le nom
+    @app_commands.command(
+        name="meeting_delete_id", description="Supprimer une réunion par ID"
+    )
+    @app_commands.describe(meeting_id="Nom ou partie du nom de la réunion")
+    @is_admin()
+    async def delete_meeting_id(
+        self, interaction: discord.Interaction, meeting_id: int
+    ):
+        await interaction.response.defer()
+
+        meeting = self.db.get_meeting(meeting_id)
+        if not meeting:
+            await interaction.followup.send("❌ Réunion introuvable")
+            return
+
+        # Supprime la réunion
+        await self.delete_meeting_id(meeting_id)
+
+    # Commande pour modifier une réunion par le nom
+    @app_commands.command(
+        name="meeting_update", description="Modifier une réunion par nom"
+    )
+    @app_commands.describe(
+        reunion="Nom ou partie du nom de la réunion",
+        titre="Nouveau titre de la réunion",
+        date="Nouvelle date de la réunion (JJ/MM/AAAA)",
+        heure="Nouvelle heure de la réunion (HH:MM)",
+        roles='Nouveaux rôles ciblés ("ALL", "DEV", "IA", "INFRA" ou combinaison "DEV,IA")',
+        description="Nouvelle description de la réunion (optionnel)",
+    )
+    @is_admin()
+    async def update_meeting(
+        self,
+        interaction: discord.Interaction,
+        reunion: str,
+        titre: str,
+        date: str,
+        heure: str,
+        roles: Optional[str] = "ALL",
+        description: Optional[str] = None,
+    ):
+        await interaction.response.defer()
+
+        if self.db.update_meeting_by_name(
+            reunion, titre, date, heure, roles, description
+        ):
+            await interaction.followup.send(f"✅ Réunion '{reunion}' modifiée")
+        else:
+            await interaction.followup.send(f"❌ Réunion non trouvée", ephemeral=True)
+
+    # Commande pour modifier une réunion par ID
+    @app_commands.command(
+        name="meeting_update_id", description="Modifier une réunion par ID"
+    )
+    @app_commands.describe(
+        meeting_id="ID de la réunion",
+        titre="Nouveau titre de la réunion",
+        date="Nouvelle date de la réunion (JJ/MM/AAAA)",
+        heure="Nouvelle heure de la réunion (HH:MM)",
+        roles='Nouveaux rôles ciblés ("ALL", "DEV", "IA", "INFRA" ou combinaison "DEV,IA")',
+        description="Nouvelle description de la réunion (optionnel)",
+    )
+    @is_admin()
+    async def update_meeting_by_id(
+        self,
+        interaction: discord.Interaction,
+        meeting_id: int,
+        titre: str,
+        date: str,
+        heure: str,
+        roles: Optional[str] = "ALL",
+        description: Optional[str] = None,
+    ):
+        await interaction.response.defer()
+
+        meeting = self.db.get_meeting(meeting_id)
+        if not meeting:
+            await interaction.followup.send("❌ Réunion introuvable", ephemeral=True)
+            return
+
+        if self.db.update_meeting_by_id(
+            meeting_id, titre, date, heure, roles, description
+        ):
+            await interaction.followup.send(f"✅ Réunion ID '{meeting_id}' modifiée")
+        else:
+            await interaction.followup.send(
+                f"❌ Erreur lors de la modification", ephemeral=True
+            )
+
     # Lancer l'appel pour une réunion par nom
     @app_commands.command(
         name="appel", description="Faire l'appel pour une réunion (nom partiel)"
@@ -528,7 +632,7 @@ class AdminAttendanceView(discord.ui.View):
 
         # Initialiser avec les statuts existants
         self._load_existing_attendance()
-        
+
         # Initialiser (ou mettre à jour) le select décoré défini plus bas
         first_page_members = self.get_current_page_members()
         select_options = []
@@ -562,7 +666,11 @@ class AdminAttendanceView(discord.ui.View):
 
                     self.selected_member_id = sel
                     selected_name = next(
-                        (m.full_name or m.username for m in self.members if m.id == self.selected_member_id),
+                        (
+                            m.full_name or m.username
+                            for m in self.members
+                            if m.id == self.selected_member_id
+                        ),
                         "Membre",
                     )
                     await select_interaction.response.send_message(
@@ -577,7 +685,7 @@ class AdminAttendanceView(discord.ui.View):
         """Tronque un nom s'il est trop long"""
         if len(name) <= max_length:
             return name
-        return name[:max_length-3] + "..."
+        return name[: max_length - 3] + "..."
 
     def _load_existing_attendance(self):
         """Charger les présences déjà enregistrées"""

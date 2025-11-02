@@ -26,6 +26,10 @@
 **Réunions:**
 
 - ✅👑`/meeting_create [titre] [date] [heure] [roles] [description]` - Créer une réunion
+- ✅👑`/meeting_delete [reunion]` - Supprimer une réunion
+- ✅👑`/meeting_delete_id [id]` - Supprimer une réunion par ID
+- ✅👑`/meeting_update [reunion] [titre] [date] [heure] [roles] [description]` - Modifier une réunion
+- ✅👑`/meeting_update_id [id] [titre] [date] [heure] [roles] [description]` - Modifier une réunion par ID
 - ✅👑`/appel [reunion]` - Faire l'appel en spécifiant le nom de la réunion
 - ✅👑`/appel_id [id]` - Faire l'appel en spécifiant l'id de la réunion
 - ✅👤`/meeting_stats_id [id]` - Voir les statistiques d'une réunion passée en précisant l'id
