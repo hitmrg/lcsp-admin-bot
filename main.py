@@ -10,11 +10,17 @@ from dotenv import load_dotenv
 # Charger les variables d'environnement
 load_dotenv()
 
-# Configuration du logging
+# Configuration du logging (fichier et console)
+# Le fichier de log sera lcsp_bot.log et se trouvera dans le répertoire logs
+if not os.path.exists("logs"):
+    os.makedirs("logs")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("lcsp_bot.log"), logging.StreamHandler()],
+    handlers=[
+        logging.FileHandler("logs/lcsp_bot.log"),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger("LCSP_BOT_ADMIN")
 
@@ -34,15 +40,27 @@ class LCSPBot(commands.Bot):
 
     # Initialisation du bot
     async def setup_hook(self):
-        # Charger les cogs
-        cogs = ["cogs.admin", "cogs.members", "cogs.meetings", "cogs.reports"]
-
-        for cog in cogs:
-            try:
-                await self.load_extension(cog)
-                logger.info(f"✅ Cog chargé: {cog}")
-            except Exception as e:
-                logger.error(f"❌ Erreur chargement {cog}: {e}")
+        # Charger récursivement les cogs dans ./cogs et ses sous-dossiers
+        for root, dirs, files in os.walk("./cogs"):
+            for filename in files:
+                if not filename.endswith(".py"):
+                    continue
+                # ignorer le fichier is_admin.py
+                if filename == "is_admin.py":
+                    continue
+                module_name = filename[:-3]
+                # Ignorer les __init__.py
+                if module_name == "__init__":
+                    continue
+                # Construire le nom d'extension en dotted path (ex: cogs.admin.clear)
+                rel_dir = os.path.relpath(root, ".")
+                dotted_dir = rel_dir.replace(os.sep, ".")
+                cog_name = f"{dotted_dir}.{module_name}"
+                try:
+                    await self.load_extension(cog_name)
+                    logger.info(f"✅ Cog chargé: {cog_name}")
+                except Exception as e:
+                    logger.error(f"❌ Erreur de chargement du cog {cog_name}: {e}")
 
         # Synchroniser les commandes slash
         try:

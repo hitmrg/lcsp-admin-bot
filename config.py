@@ -39,6 +39,12 @@ ADMIN_ROLES = ["*"]
 # Rôles des pôles techniques
 MEMBER_ROLES = ["INFRA", "DEV", "IA"]
 
+# Rôle d'accès aux tickets pour rentrer dans un pôle du laboratoire
+TICKET_ACCESS_ROLES = ["Membres"]
+
+# Rôles basique d'accès au serveur
+BASIC_ROLES = ["Visiteurs"]
+
 # Configuration des canaux (optionnel)
 ANNOUNCEMENT_CHANNEL = os.getenv("ANNOUNCEMENT_CHANNEL", "╭📢・annonces")
 MEETING_CHANNEL = os.getenv("MEETING_CHANNEL", "╭📅・planning")
