@@ -17,10 +17,7 @@ if not os.path.exists("logs"):
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("logs/lcsp_bot.log"),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.FileHandler("logs/lcsp_bot.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger("LCSP_BOT_ADMIN")
 

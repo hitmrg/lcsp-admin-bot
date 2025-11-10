@@ -62,7 +62,7 @@ class Member(Base):
     username = Column(String(100), nullable=False)
     full_name = Column(String(200))
     email = Column(String(200), nullable=True)  # Email optionnel
-    role = Column(String(100))  # DEV, IA, INFRA
+    role = Column(String(100), nullable=True)  # DEV, IA, INFRA
     specialization = Column(String(200))
     status = Column(Enum(MemberStatus), default=MemberStatus.ACTIVE)
     joined_at = Column(DateTime, default=datetime.utcnow)
@@ -129,6 +129,47 @@ class Attendance(Base):
 
     member = relationship("Member", back_populates="attendances")
     meeting = relationship("Meeting", back_populates="attendances")
+
+
+# Status des tickets
+class TicketStatus(enum.Enum):
+    OPEN = "open"
+    CLOSED = "closed"
+    PENDING = "pending"
+
+
+# Types de tickets
+class TicketType(enum.Enum):
+    JOIN_LABO = "join_labo"
+    JOIN_POLE = "join_pole"
+
+
+class Ticket(Base):
+    __tablename__ = "tickets"
+
+    id = Column(Integer, primary_key=True)
+    discord_user_id = Column(String(32), nullable=False, index=True)
+    discord_username = Column(String(100), nullable=False)
+    channel_id = Column(String(32), unique=True, nullable=False)
+    type = Column(Enum(TicketType), nullable=False)
+    pole_requested = Column(String(10))  # Pour les tickets de pôle (DEV, IA, INFRA)
+    reason = Column(Text)
+    status = Column(Enum(TicketStatus), default=TicketStatus.OPEN)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    closed_at = Column(DateTime)
+    closed_by = Column(String(32))  # Discord ID de qui a fermé
+    assigned_to = Column(String(32))  # Discord ID de l'admin assigné
+
+
+class TicketSettings(Base):
+    __tablename__ = "ticket_settings"
+
+    id = Column(Integer, primary_key=True)
+    guild_id = Column(String(32), unique=True, nullable=False)
+    tickets_enabled = Column(Boolean, default=True)
+    pole_tickets_enabled = Column(Boolean, default=True)
+    ticket_category_id = Column(String(32))  # ID de la catégorie pour les tickets
+    log_channel_id = Column(String(32))  # Channel pour logs des tickets
 
 
 # Initialise la base de données (crée les tables)

@@ -246,6 +246,165 @@ class Database:
 
             return upcoming
 
+    # --- Tickets ---
+    @staticmethod
+    def get_ticket_settings(guild_id: str):
+        """Récupérer les paramètres de tickets pour un serveur"""
+        with get_session() as session:
+            from models import TicketSettings
+
+            settings = (
+                session.query(TicketSettings)
+                .filter(TicketSettings.guild_id == str(guild_id))
+                .first()
+            )
+            if not settings:
+                # Créer les paramètres par défaut
+                settings = TicketSettings(guild_id=str(guild_id))
+                session.add(settings)
+                session.flush()
+            session.expunge(settings)
+            return settings
+
+    @staticmethod
+    def update_ticket_settings(guild_id: str, **kwargs):
+        """Mettre à jour les paramètres de tickets"""
+        with get_session() as session:
+            from models import TicketSettings
+
+            settings = (
+                session.query(TicketSettings)
+                .filter(TicketSettings.guild_id == str(guild_id))
+                .first()
+            )
+            if not settings:
+                settings = TicketSettings(guild_id=str(guild_id))
+                session.add(settings)
+
+            for key, value in kwargs.items():
+                setattr(settings, key, value)
+            session.flush()
+            session.expunge(settings)
+            return settings
+
+    @staticmethod
+    def get_user_open_ticket(discord_user_id: str):
+        """Vérifier si un utilisateur a un ticket ouvert"""
+        with get_session() as session:
+            from models import Ticket, TicketStatus
+
+            ticket = (
+                session.query(Ticket)
+                .filter(
+                    Ticket.discord_user_id == str(discord_user_id),
+                    Ticket.status == TicketStatus.OPEN,
+                )
+                .first()
+            )
+            if ticket:
+                session.expunge(ticket)
+            return ticket
+
+    @staticmethod
+    def create_ticket(
+        discord_user_id: str,
+        discord_username: str,
+        channel_id: str,
+        ticket_type: str,
+        pole_requested: str = None,
+        reason: str = None,
+    ):
+        """Créer un nouveau ticket"""
+        with get_session() as session:
+            from models import Ticket, TicketType
+
+            # Convertir le type string en enum
+            type_enum = (
+                TicketType.JOIN_LABO
+                if ticket_type == "join_labo"
+                else TicketType.JOIN_POLE
+            )
+
+            ticket = Ticket(
+                discord_user_id=str(discord_user_id),
+                discord_username=discord_username,
+                channel_id=str(channel_id),
+                type=type_enum,
+                pole_requested=pole_requested,
+                reason=reason,
+            )
+            session.add(ticket)
+            session.flush()
+            session.expunge(ticket)
+            return ticket
+
+    @staticmethod
+    def get_ticket_by_channel(channel_id: str):
+        """Récupérer un ticket par son channel ID"""
+        with get_session() as session:
+            from models import Ticket
+
+            ticket = (
+                session.query(Ticket)
+                .filter(Ticket.channel_id == str(channel_id))
+                .first()
+            )
+            if ticket:
+                session.expunge(ticket)
+            return ticket
+
+    @staticmethod
+    def close_ticket(channel_id: str, closed_by: str):
+        """Fermer un ticket"""
+        with get_session() as session:
+            from models import Ticket, TicketStatus
+
+            ticket = (
+                session.query(Ticket)
+                .filter(Ticket.channel_id == str(channel_id))
+                .first()
+            )
+            if ticket:
+                ticket.status = TicketStatus.CLOSED
+                ticket.closed_at = datetime.utcnow()
+                ticket.closed_by = str(closed_by)
+                session.flush()
+                session.expunge(ticket)
+            return ticket
+
+    @staticmethod
+    def get_open_tickets():
+        """Récupérer tous les tickets ouverts"""
+        with get_session() as session:
+            from models import Ticket, TicketStatus
+
+            tickets = (
+                session.query(Ticket)
+                .filter(Ticket.status == TicketStatus.OPEN)
+                .order_by(Ticket.created_at.desc())
+                .all()
+            )
+            for ticket in tickets:
+                session.expunge(ticket)
+            return tickets
+
+    @staticmethod
+    def assign_ticket(channel_id: str, assigned_to: str):
+        """Assigner un ticket à un admin"""
+        with get_session() as session:
+            from models import Ticket
+
+            ticket = (
+                session.query(Ticket)
+                .filter(Ticket.channel_id == str(channel_id))
+                .first()
+            )
+            if ticket:
+                ticket.assigned_to = str(assigned_to)
+                session.flush()
+                session.expunge(ticket)
+            return ticket
+
     # --- Présence ---
     @staticmethod
     def record_attendance(

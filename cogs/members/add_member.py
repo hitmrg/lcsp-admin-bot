@@ -30,7 +30,7 @@ class AddMember(commands.Cog):
         interaction: discord.Interaction,
         user: discord.Member,
         nom: str,
-        pole: str,  # DEV, IA, INFRA
+        pole: Optional[str] = None,  # DEV, IA, INFRA
         email: Optional[str] = None,
         specialisation: Optional[str] = None,
     ):
@@ -86,6 +86,7 @@ class AddMember(commands.Cog):
         await interaction.followup.send(embed=embed)
 
         logger.info(f"Membre ajouté: {user} ({member.id}) par {interaction.user}")
+
 
 async def setup(bot):
     await bot.add_cog(AddMember(bot))

@@ -10,10 +10,10 @@ GUILD_ID = int(os.getenv("GUILD_ID", "0"))
 LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID", "0"))
 
 # Base de données - Construction sécurisée de l'URL
-DB_HOST = os.getenv("DB_HOST", "postgres")
-DB_PORT = int(os.getenv("DB_PORT", "5432"))
-DB_NAME = os.getenv("DB_NAME", "lcsp_db")
-DB_USER = os.getenv("DB_USER", "lcsp_admin")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = int(os.getenv("DB_PORT"))
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 # Encoder le mot de passe pour éviter les problèmes avec les caractères spéciaux
@@ -46,6 +46,7 @@ TICKET_ACCESS_ROLES = ["Membres"]
 BASIC_ROLES = ["Visiteurs"]
 
 # Configuration des canaux (optionnel)
+CREATE_TICKET_CHANNEL = os.getenv("CREATE_TICKET_CHANNEL", "╭🆕・creation-tickets")
 ANNOUNCEMENT_CHANNEL = os.getenv("ANNOUNCEMENT_CHANNEL", "╭📢・annonces")
 MEETING_CHANNEL = os.getenv("MEETING_CHANNEL", "╭📅・planning")
 GENERAL_CHANNEL = os.getenv("GENERAL_CHANNEL", "╭💬・général")
