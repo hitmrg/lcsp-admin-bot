@@ -45,6 +45,20 @@
 - ✅👤`/rapport [jours] [format]` - Rapport d'activité
 - ✅👤`/export [type]` - Exporter les informations
 
+**Tickets:**
+
+- ✅👑`/setup_ticket_menu [channel]` - Créer l'embed pour création de tickets
+- ✅👑`/ticket_config [activer_tickets] [activer_tickets_pole] [categorie] [log_channel]` - Configurer le système de tickets
+
+  - `activer_tickets` - Activer/désactiver tout le système
+  - `activer_tickets_pole` - Activer/désactiver uniquement les tickets de pôle
+  - `categorie` - Définir la catégorie où créer les tickets
+  - `log_channel` - Définir le canal de logs
+
+- ✅👑`/ticket_list` - Voir tous les tickets ouverts
+- ✅👑`/ticket_close [id] [raison]` - Fermer un ticket spécifique
+- ✅👑`/ticket_stats` - Voir les statistiques des tickets
+
 ### TROUBLESHOOTING :
 
 #### "exec /app/docker-entrypoint.sh: no such file or directory"

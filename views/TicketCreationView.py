@@ -4,15 +4,37 @@ from database import Database
 from views.TicketControlView import TicketControlView
 from views.PoleTicketControlView import PoleTicketControlView
 
+
 class TicketTypeSelect(discord.ui.Select):
     def __init__(self, db: Database):
         options = [
-            discord.SelectOption(label="Rejoindre DEV", value="DEV", description="Postuler au pôle Développement"),
-            discord.SelectOption(label="Rejoindre IA", value="IA", description="Postuler au pôle Intelligence Artificielle"),
-            discord.SelectOption(label="Rejoindre INFRA", value="INFRA", description="Postuler au pôle Infrastructure"),
-            discord.SelectOption(label="Rejoindre le Laboratoire", value="LABO", description="Rejoindre le laboratoire LCSP"),
+            discord.SelectOption(
+                label="Rejoindre DEV",
+                value="DEV",
+                description="Postuler au pôle Développement",
+            ),
+            discord.SelectOption(
+                label="Rejoindre IA",
+                value="IA",
+                description="Postuler au pôle Intelligence Artificielle",
+            ),
+            discord.SelectOption(
+                label="Rejoindre INFRA",
+                value="INFRA",
+                description="Postuler au pôle Infrastructure",
+            ),
+            discord.SelectOption(
+                label="Rejoindre le Laboratoire",
+                value="LABO",
+                description="Rejoindre le laboratoire LCSP",
+            ),
         ]
-        super().__init__(placeholder="Choisissez le type de ticket à ouvrir...", min_values=1, max_values=1, options=options)
+        super().__init__(
+            placeholder="Choisissez le type de ticket à ouvrir...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
         self.db = db
 
     async def callback(self, interaction: discord.Interaction):
@@ -23,27 +45,57 @@ class TicketTypeSelect(discord.ui.Select):
 
         # Récupérer / créer la catégorie de tickets
         settings = self.db.get_ticket_settings(str(interaction.guild.id))
+        if not settings.tickets_enabled:
+            await interaction.followup.send(
+                "❌ Le système de tickets est actuellement désactivé.",
+                ephemeral=True,
+            )
+            return
+
+        if not settings.pole_tickets_enabled:
+            await interaction.followup.send(
+                "❌ Les tickets pour rejoindre un pôle sont temporairement désactivés.\n"
+                "Utilisez `/ticket_labo` pour rejoindre le laboratoire d'abord.",
+                ephemeral=True,
+            )
+            return
         category = None
         if settings and settings.ticket_category_id:
             try:
-                category = interaction.guild.get_channel(int(settings.ticket_category_id))
+                category = interaction.guild.get_channel(
+                    int(settings.ticket_category_id)
+                )
             except:
                 category = None
 
         if not category:
             category = await interaction.guild.create_category("📋 TICKETS")
-            self.db.update_ticket_settings(str(interaction.guild.id), ticket_category_id=str(category.id))
+            self.db.update_ticket_settings(
+                str(interaction.guild.id), ticket_category_id=str(category.id)
+            )
 
         # Préparer les permission overwrites communs
         overwrites = {
-            interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, attach_files=True, embed_links=True),
+            interaction.guild.default_role: discord.PermissionOverwrite(
+                view_channel=False
+            ),
+            interaction.user: discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                attach_files=True,
+                embed_links=True,
+            ),
         }
 
         # Role admin wildcard comme utilisé dans le code existant
         admin_role = discord.utils.get(interaction.guild.roles, name="*")
         if admin_role:
-            overwrites[admin_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_messages=True, manage_channels=True)
+            overwrites[admin_role] = discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                manage_messages=True,
+                manage_channels=True,
+            )
 
         # Si c'est un ticket pôle, ajouter le rôle du pôle pour visibilité
         is_pole = choice in ("DEV", "IA", "INFRA")
@@ -51,11 +103,15 @@ class TicketTypeSelect(discord.ui.Select):
         if is_pole:
             pole_role = discord.utils.get(interaction.guild.roles, name=choice)
             if pole_role:
-                overwrites[pole_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+                overwrites[pole_role] = discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True
+                )
 
         # Construire le nom du canal
         safe_name = f"ticket-{choice.lower()}-{interaction.user.name}".lower()
-        channel_name = "".join(c if c.isalnum() or c == "-" else "-" for c in safe_name)[:100]
+        channel_name = "".join(
+            c if c.isalnum() or c == "-" else "-" for c in safe_name
+        )[:100]
 
         # Créer le canal
         channel = await category.create_text_channel(
@@ -86,16 +142,28 @@ class TicketTypeSelect(discord.ui.Select):
         # Construire l'embed d'accueil et la vue appropriée
         if is_pole:
             pole_icons = {"DEV": "💻", "IA": "🤖", "INFRA": "🛠️"}
-            pole_colors = {"DEV": discord.Color.blue(), "IA": discord.Color.purple(), "INFRA": discord.Color.green()}
+            pole_colors = {
+                "DEV": discord.Color.blue(),
+                "IA": discord.Color.purple(),
+                "INFRA": discord.Color.green(),
+            }
             embed = discord.Embed(
                 title=f"{pole_icons.get(choice,'📋')} Ticket - Rejoindre le Pôle {choice}",
                 description=f"Bienvenue {interaction.user.mention} !\n\nVotre demande pour rejoindre le pôle **{choice}** va être examinée.",
                 color=pole_colors.get(choice, discord.Color.blue()),
                 timestamp=discord.utils.utcnow(),
             )
-            embed.add_field(name="👤 Demandeur", value=f"{interaction.user.mention}\n{interaction.user.name}", inline=True)
+            embed.add_field(
+                name="👤 Demandeur",
+                value=f"{interaction.user.mention}\n{interaction.user.name}",
+                inline=True,
+            )
             embed.add_field(name="🎯 Pôle demandé", value=choice, inline=True)
-            embed.add_field(name="📅 Date", value=discord.utils.utcnow().strftime("%d/%m/%Y %H:%M"), inline=True)
+            embed.add_field(
+                name="📅 Date",
+                value=discord.utils.utcnow().strftime("%d/%m/%Y %H:%M"),
+                inline=True,
+            )
             embed.set_footer(text=f"Ticket ID: {ticket.id}")
             view = PoleTicketControlView(self.db, ticket.id, choice)
         else:
@@ -105,8 +173,16 @@ class TicketTypeSelect(discord.ui.Select):
                 color=discord.Color.blue(),
                 timestamp=discord.utils.utcnow(),
             )
-            embed.add_field(name="👤 Demandeur", value=f"{interaction.user.mention}\n{interaction.user.name}", inline=True)
-            embed.add_field(name="📅 Date", value=discord.utils.utcnow().strftime("%d/%m/%Y %H:%M"), inline=True)
+            embed.add_field(
+                name="👤 Demandeur",
+                value=f"{interaction.user.mention}\n{interaction.user.name}",
+                inline=True,
+            )
+            embed.add_field(
+                name="📅 Date",
+                value=discord.utils.utcnow().strftime("%d/%m/%Y %H:%M"),
+                inline=True,
+            )
             embed.set_footer(text=f"Ticket ID: {ticket.id}")
             view = TicketControlView(self.db, ticket.id)
 
@@ -115,7 +191,9 @@ class TicketTypeSelect(discord.ui.Select):
 
         # Mentionner le rôle du pôle s'il existe pour notifier
         if pole_role:
-            await channel.send(f"{pole_role.mention} - Nouvelle demande pour rejoindre le pôle!")
+            await channel.send(
+                f"{pole_role.mention} - Nouvelle demande pour rejoindre le pôle!"
+            )
 
         # Envoyer un log si configuré
         if settings and settings.log_channel_id:
@@ -134,6 +212,7 @@ class TicketTypeSelect(discord.ui.Select):
             f"✅ Votre ticket pour **{('Pôle '+choice) if is_pole else 'le laboratoire'}** a été créé : {channel.mention}",
             ephemeral=True,
         )
+
 
 class TicketCreationView(discord.ui.View):
     def __init__(self):

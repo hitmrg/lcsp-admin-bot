@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from typing import Optional
 import logging
-from database import Database
+from database import Database, get_session
 from cogs.admin.is_admin import is_admin
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class TicketSearch(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         from models import Ticket, TicketStatus
 
-        with self.db.get_session() as session:
+        with get_session() as session:
             query = session.query(Ticket)
             if utilisateur:
                 query = query.filter(Ticket.discord_user_id == str(utilisateur.id))

@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import logging
-from database import Database
+from database import Database, get_session
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class TicketStats(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         from models import Ticket, TicketStatus, TicketType
 
-        with self.db.get_session() as session:
+        with get_session() as session:
             total_tickets = session.query(Ticket).count()
             open_tickets = (
                 session.query(Ticket).filter(Ticket.status == TicketStatus.OPEN).count()
