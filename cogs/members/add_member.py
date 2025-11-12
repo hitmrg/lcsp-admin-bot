@@ -41,14 +41,17 @@ class AddMember(commands.Cog):
             await interaction.followup.send(f"❌ {user.mention} est déjà enregistré")
             return
 
-        # Vérifier le pôle
         valid_poles = ["DEV", "IA", "INFRA"]
-        pole = pole.upper()
-        if pole not in valid_poles:
-            await interaction.followup.send(
-                f"❌ Pôle invalide: {pole}\nPôles valides: {', '.join(valid_poles)}"
-            )
-            return
+
+        # Si un pôle est fourni, on valide
+        if pole:
+            pole = pole.upper()
+            if pole not in valid_poles:
+                await interaction.followup.send(
+                    f"❌ Pôle invalide: {pole}\nPôles valides: {', '.join(valid_poles)}"
+                )
+                return
+        # Si pole est None, on continue sans erreur
 
         # Ajouter le membre
         member = self.db.add_member(

@@ -30,7 +30,7 @@ echo "1️⃣ Vérification de Docker..."
 if ! command -v docker &> /dev/null; then
     error_exit "Docker n'est pas installé. Installez Docker d'abord."
 fi
-if ! command -v docker-compose &> /dev/null; then
+if ! command -v docker compose &> /dev/null; then
     error_exit "Docker Compose n'est pas installé."
 fi
 success "Docker et Docker Compose détectés"
@@ -59,19 +59,19 @@ success "Configuration .env détectée"
 
 # Arrêter les conteneurs existants
 echo "3️⃣ Arrêt des conteneurs existants..."
-docker-compose down 2>/dev/null || true
+docker compose down 2>/dev/null || true
 success "Conteneurs arrêtés"
 
 # Construire les images
 echo "4️⃣ Construction des images Docker..."
-if ! docker-compose build; then
+if ! docker compose build; then
     error_exit "Échec de la construction des images"
 fi
 success "Images construites"
 
 # Démarrer les services
 echo "5️⃣ Démarrage des services..."
-if ! docker-compose up -d; then
+if ! docker compose up -d; then
     error_exit "Échec du démarrage des services"
 fi
 success "Services démarrés"
@@ -81,14 +81,14 @@ echo "6️⃣ Vérification de l'état des services..."
 sleep 5
 
 # Vérifier PostgreSQL
-if docker-compose exec -T postgres pg_isready &>/dev/null; then
+if docker compose exec -T postgres pg_isready &>/dev/null; then
     success "PostgreSQL est opérationnel"
 else
     warning "PostgreSQL n'est pas encore prêt, vérifiez les logs"
 fi
 
 # Vérifier le bot
-if docker-compose ps | grep -q "lcsp.*Up"; then
+if docker compose ps | grep -q "lcsp.*Up"; then
     success "Bot Discord est en cours d'exécution"
 else
     warning "Le bot n'est pas encore démarré, vérifiez les logs"
@@ -98,16 +98,16 @@ fi
 echo ""
 echo "7️⃣ Derniers logs du lcsp_admin_bot:"
 echo "------------------------"
-docker-compose logs --tail=20 lcsp_admin_bot
+docker compose logs --tail=20 lcsp_admin_bot
 
 echo ""
 echo "================================"
 success "Déploiement terminé!"
 echo ""
 echo "📝 Commandes utiles:"
-echo "  • Voir les logs:        docker-compose logs -f nom/id conteneur"
-echo "  • Redémarrer le bot:    docker-compose restart nom/id conteneur"
-echo "  • Arrêter tout:         docker-compose down"
-echo "  • État des services:    docker-compose ps"
-echo "  • Backup DB:           docker-compose exec postgres pg_dump -U lcsp_admin lcsp_db > backup.sql"
+echo "  • Voir les logs:        docker compose logs -f nom/id conteneur"
+echo "  • Redémarrer le bot:    docker compose restart nom/id conteneur"
+echo "  • Arrêter tout:         docker compose down"
+echo "  • État des services:    docker compose ps"
+echo "  • Backup DB:           docker compose exec postgres pg_dump -U lcsp_admin lcsp_db > backup.sql"
 echo ""
