@@ -94,6 +94,10 @@ else
     warning "Le bot n'est pas encore démarré, vérifiez les logs"
 fi
 
+# Mettre les permissions sur le fichier logs 
+chmod 777 logs
+success "Permissions données aux logs"
+
 # Afficher les logs
 echo ""
 echo "7️⃣ Derniers logs du lcsp_admin_bot:"
