@@ -54,8 +54,7 @@ class TicketTypeSelect(discord.ui.Select):
 
         if not settings.pole_tickets_enabled:
             await interaction.followup.send(
-                "❌ Les tickets pour rejoindre un pôle sont temporairement désactivés.\n"
-                "Utilisez `/ticket_labo` pour rejoindre le laboratoire d'abord.",
+                "❌ Les tickets pour rejoindre un pôle sont temporairement désactivés.\n",
                 ephemeral=True,
             )
             return
@@ -97,15 +96,8 @@ class TicketTypeSelect(discord.ui.Select):
                 manage_channels=True,
             )
 
-        # Si c'est un ticket pôle, ajouter le rôle du pôle pour visibilité
+        # Si c'est un ticket pôle, ne pas ajouter le rôle dans le canal
         is_pole = choice in ("DEV", "IA", "INFRA")
-        pole_role = None
-        if is_pole:
-            pole_role = discord.utils.get(interaction.guild.roles, name=choice)
-            if pole_role:
-                overwrites[pole_role] = discord.PermissionOverwrite(
-                    view_channel=True, send_messages=True
-                )
 
         # Construire le nom du canal
         safe_name = f"ticket-{choice.lower()}-{interaction.user.name}".lower()
@@ -191,9 +183,7 @@ class TicketTypeSelect(discord.ui.Select):
 
         # Mentionner le rôle du pôle s'il existe pour notifier
         if pole_role:
-            await channel.send(
-                f"{pole_role.mention} - Nouvelle demande pour rejoindre le pôle!"
-            )
+            await channel.send(f"Nouvelle demande pour rejoindre le pôle!")
 
         # Envoyer un log si configuré
         if settings and settings.log_channel_id:
