@@ -181,10 +181,6 @@ class TicketTypeSelect(discord.ui.Select):
         # Envoyer le message d'accueil dans le canal du ticket
         await channel.send(embed=embed, view=view)
 
-        # Mentionner le rôle du pôle s'il existe pour notifier
-        if pole_role:
-            await channel.send(f"Nouvelle demande pour rejoindre le pôle!")
-
         # Envoyer un log si configuré
         if settings and settings.log_channel_id:
             log_channel = interaction.guild.get_channel(int(settings.log_channel_id))
